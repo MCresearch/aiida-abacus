@@ -1,0 +1,85 @@
+name: ci
+
+on:
+  push:
+    # only pushes to main trigger
+    branches: [main]
+  pull_request:
+    # always triggered
+
+jobs:
+
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        python-version: ['3.12']
+        aiida-version: ['stable']
+
+    services:
+      postgres:
+        image: postgres:10
+        env:
+          POSTGRES_DB: test_aiida
+          POSTGRES_PASSWORD: ''
+          POSTGRES_HOST_AUTH_METHOD: trust
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      rabbitmq:
+        image: rabbitmq:latest
+        ports:
+          - 5672:5672
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install project manager
+      run: |
+        pip install hatch
+    - name: Run test suite
+      env:
+        PYTEST_ADDOPTS: "--durations=0"
+      run: |
+        hatch test --cover
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install project manager
+      run: |
+        pip install hatch
+    - name: Build docs
+      run: |
+        hatch run docs:build
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install project manager
+      run: |
+        pip install hatch
+    - name: Run formatter and linter
+      run: |
+        hatch fmt --check
