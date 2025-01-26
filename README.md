@@ -11,14 +11,21 @@ This is the [AiiDA](https://www.aiida.net/) plugin for [ABACUS](https://abacus.u
 
 ## Installation
 
-Install using pip:
+<!-- Install using pip:
 
 ```shell
 pip install aiida-abacus
-```
+``` -->
 
-<!-- Install from source:
+Install from source:
+```bash
+git clone https://github.com/MCresearch/aiida-abacus.git
+cd aiida-abacus
+pip install .
+# or pip install -e .
+# if you want to make a change to the plugin
 ```
+<!-- ```
 git clone https://github.com/MCresearch/aiida-abacus.git
 pip install aiida-abacus
 ``` -->
@@ -27,9 +34,12 @@ pip install aiida-abacus
 
 - Quick start
 
+See the `examples` directory to learn about how to run this plugin with scripts.
+
 - Get started with [AiiDA](https://aiida-tutorials.readthedocs.io/en/latest/sections/getting_started/index.html).
 
 - Documentation for [ABACUS](https://abacus.deepmodeling.com/en/latest/index.html).
+
 
 <!-- ## Usage -->
 
@@ -49,7 +59,7 @@ verdi data abacus list
 verdi data abacus export <PK>
 ``` -->
 
-<!-- ## Development
+## Development
 
 ```shell
 git clone https://github.com/MCresearch/aiida-abacus .
@@ -60,7 +70,9 @@ pre-commit install  # install pre-commit hooks
 pytest -v  # discover and run all tests
 ```
 
-See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
+Developer guide is still under construction.
+
+<!-- See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
 
 ## License
 
