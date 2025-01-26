@@ -41,23 +41,6 @@ See the `examples` directory to learn about how to run this plugin with scripts.
 - Documentation for [ABACUS](https://abacus.deepmodeling.com/en/latest/index.html).
 
 
-<!-- ## Usage -->
-
-<!-- Here goes a complete example of how to submit a test calculation using this plugin.
-
-A quick demo of how to submit a calculation:
-```shell
-verdi daemon start     # make sure the daemon is running
-cd examples
-./example_01.py        # run test calculation
-verdi process list -a  # check record of calculation
-```
-
-The plugin also includes verdi commands to inspect its data types:
-```shell
-verdi data abacus list
-verdi data abacus export <PK>
-``` -->
 
 ## Development
 
@@ -78,9 +61,28 @@ Developer guide is still under construction.
     - `calculations.py`: The `AbacusCalculation` calcjob class.
     - `parsers.py`: The `abacus.abacus` default parser for `AbacusCalculation`.
 - `examples/`: Example of how to submit a calculation using this plugin via a script.
+<!-- See [Features](#features) for details. -->
 - `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install by `pip install -e .[testing]` and run `pytest`.
 
 <!-- See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
+
+<!-- ## Features -->
+
+## Usage
+
+Here goes a quick demo of how to submit a calculation using this plugin:
+```shell
+verdi daemon start     # make sure the daemon is running
+cd examples
+./launch.py        # run example calculation
+verdi process list -a  # check record of calculation
+```
+
+<!-- The plugin also includes verdi commands to inspect its data types:
+```shell
+verdi data abacus list
+verdi data abacus export <PK>
+``` -->
 
 ## License
 
