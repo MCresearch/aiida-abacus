@@ -72,6 +72,14 @@ pytest -v  # discover and run all tests
 
 Developer guide is still under construction.
 
+### Repository contents
+
+- `src/aiida_abacus`: Main source code of `aiida-abacus` plugin
+    - `calculations.py`: The `AbacusCalculation` calcjob class.
+    - `parsers.py`: The `abacus.abacus` default parser for `AbacusCalculation`.
+- `examples/`: Example of how to submit a calculation using this plugin via a script.
+- `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install by `pip install -e .[testing]` and run `pytest`.
+
 <!-- See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
 
 ## License
