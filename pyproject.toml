@@ -44,10 +44,10 @@ Source = "https://github.com/MCresearch/aiida-abacus"
 "abacus" = "aiida_abacus.data:DiffParameters"
 
 [project.entry-points."aiida.calculations"]
-"abacus" = "aiida_abacus.calculations:DiffCalculation"
+"abacus.abacus" = "aiida_abacus.calculations:DiffCalculation"
 
 [project.entry-points."aiida.parsers"]
-"abacus" = "aiida_abacus.parsers:DiffParser"
+"abacus.abacus" = "aiida_abacus.parsers:DiffParser"
 
 [project.entry-points."aiida.cmdline.data"]
 "abacus" = "aiida_abacus.cli:data_cli"
