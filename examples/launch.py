@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from aiida import engine, orm
+from aiida.orm import Dict, KpointsData, StructureData, load_code, load_group
 from aiida.common.exceptions import NotExistent
 from aiida.plugins import CalculationFactory, DataFactory
 import numpy as np
@@ -38,7 +39,7 @@ builder = code.get_builder()
 
 # STRU
 # adadpted from aiida-vasp
-StructureData = DataFactory('core.structure')
+# StructureData = DataFactory('core.structure')
 # /miniconda3/envs/aiida/lib/python3.12/site-packages/aiida/plugins/entry_point.py:350:
 # AiidaDeprecationWarning: The entry point `structure` is deprecated.
 # Please replace it with `core.structure`. (this will be removed in v3)
@@ -48,11 +49,16 @@ lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
 structure = StructureData(cell=lattice)
 
 # KPT
-KpointsData = DataFactory('core.array.kpoints')
+# KpointsData = DataFactory('core.array.kpoints')
 # The entry point `array.kpoints` is deprecated.
 # Please replace it with `core.array.kpoints`. (this will be removed in v3)
 kpoints = KpointsData()
 kpoints.set_kpoints_mesh([6, 6, 4], offset=[0, 0, 0.5])
+
+
+pseudo_family = load_group('SSSP/1.1/PBE/efficiency')
+builder.pseudos = pseudo_family.get_pseudos(structure=structure)
+
 
 builder.structure = structure
 builder.kpoints = kpoints

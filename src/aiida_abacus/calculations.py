@@ -12,9 +12,11 @@ from aiida import orm
 from aiida.orm import SinglefileData
 from aiida.plugins import DataFactory
 
-DiffParameters = DataFactory("abacus")
+from aiida_pseudo.data.pseudo.upf import UpfData
+
+# DiffParameters = DataFactory("abacus.abacus")
 LegacyUpfData = DataFactory('core.upf')
-UpfData = DataFactory('pseudo.upf')
+# UpfData = DataFactory('pseudo.upf')
 
 
 class DiffCalculation(CalcJob):
@@ -76,6 +78,7 @@ class DiffCalculation(CalcJob):
                 "Pass a dictionary specifying the pseudpotential node for each kind,"
                 "such as {O: <PsudoNode>}."
             ),
+            required=True,
             valid_type=(LegacyUpfData, UpfData),
             dynamic=True,
         )
@@ -308,7 +311,7 @@ class DiffCalculation(CalcJob):
     
     def write_stru(self, stru_file):
         """Write the structure file STRU."""
-        structure_content = self.generate_structure(self.inputs.structure.get_dict())
+        structure_content = self.generate_structure(self.inputs.structure, self.inputs.pseudos)
         with open(stru_file, "w") as handle:
             handle.write(structure_content)
     
