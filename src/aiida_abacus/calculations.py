@@ -82,6 +82,7 @@ class DiffCalculation(CalcJob):
         # misc stands for miscellaneous, which is some of
         # the scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.
         # extracted from the output file OUT.aiida/running_scf.log
+        # results will be stored in a Dict node.
         spec.output("misc", valid_type=orm.Dict,
                     help="The scalar outputs or"
                     "small vectors (e.g., energy, forces, stress) of the calculation.")

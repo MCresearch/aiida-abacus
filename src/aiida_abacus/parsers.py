@@ -4,11 +4,14 @@ Parsers provided by aiida_abacus.
 Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
+from aiida import orm
 from aiida.common import exceptions
 from aiida.engine import ExitCode
 from aiida.orm import SinglefileData
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
+
+import re
 
 DiffCalculation = CalculationFactory("abacus")
 
@@ -49,8 +52,21 @@ class DiffParser(Parser):
 
         # add output file
         self.logger.info(f"Parsing '{output_filename}'")
-        with self.retrieved.open(output_filename, "rb") as handle:
-            output_node = SinglefileData(file=handle)
+        # with self.retrieved.open(output_filename, "rb") as handle:
+        #     output_node = SinglefileData(file=handle)
+
+        # patter to search for pattern in output file
+        # look for " !FINAL_ETOT_IS -215.5056984090303 eV"
+        pattern = r"!FINAL_ETOT_IS\s+(-?\d+\.\d+)\s+eV"
+        pattern_compile = re.compile(pattern)
+        res = pattern_compile.search(self.contents)
+        final_energy_total = None
+        if res:
+            final_energy_total = float(res.group(1))
+        # update output_node with final_energy_total
+        # valid_type=orm.Dict
+        out_dict = {"final_energy_total": final_energy_total}
+        output_node = orm.Dict(dict=out_dict)
         self.out("abacus", output_node)
 
         return ExitCode(0)
