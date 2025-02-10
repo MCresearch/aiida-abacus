@@ -30,6 +30,18 @@ git clone https://github.com/MCresearch/aiida-abacus.git
 pip install aiida-abacus
 ``` -->
 
+### Pseudopotentials
+We use the [`aiida-pseudo` plugin](https://pypi.org/project/aiida-pseudo/) to install and manage pseudopotentials.
+It is easy to install pseudopotentials by aiida-pseudo CLI:
+```bash
+aiida-pseudo install sssp
+```
+and load the pseudopotential family installed by calling
+`load_group` in the launch script.
+```py
+pseudo_family = load_group('SSSP/1.1/PBE/efficiency')
+```
+
 ## Documentation
 
 - Quick start
@@ -41,6 +53,21 @@ See the `examples` directory to learn about how to run this plugin with scripts.
 - Documentation for [ABACUS](https://abacus.deepmodeling.com/en/latest/index.html).
 
 
+## Usage
+
+Here goes a quick demo of how to submit a calculation using this plugin:
+```shell
+verdi daemon start     # make sure the daemon is running
+cd examples
+./launch.py        # run example calculation
+verdi process list -a  # check record of calculation
+```
+
+The plugin also includes verdi commands to inspect its data types:
+```shell
+verdi data abacus list
+verdi data abacus export <PK>
+```
 
 ## Development
 
@@ -68,21 +95,6 @@ Developer guide is still under construction.
 
 <!-- ## Features -->
 
-## Usage
-
-Here goes a quick demo of how to submit a calculation using this plugin:
-```shell
-verdi daemon start     # make sure the daemon is running
-cd examples
-./launch.py        # run example calculation
-verdi process list -a  # check record of calculation
-```
-
-<!-- The plugin also includes verdi commands to inspect its data types:
-```shell
-verdi data abacus list
-verdi data abacus export <PK>
-``` -->
 
 ## License
 
