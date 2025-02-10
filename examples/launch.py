@@ -29,7 +29,7 @@ computer = orm.load_computer('localhost')
 #     )
 code = orm.InstalledCode(
     label='abacus', computer=computer,
-    filepath_executable='~/.local/bin/abacus',
+    filepath_executable='abacus',
     default_calc_job_plugin='abacus'
 )
 
