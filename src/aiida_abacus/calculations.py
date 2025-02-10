@@ -14,6 +14,8 @@ from aiida.plugins import DataFactory
 
 from aiida_pseudo.data.pseudo.upf import UpfData
 
+import numpy as np
+
 # DiffParameters = DataFactory("abacus.abacus")
 LegacyUpfData = DataFactory('core.upf')
 # UpfData = DataFactory('pseudo.upf')
@@ -41,7 +43,7 @@ class DiffCalculation(CalcJob):
         # set default values for AiiDA options
         spec.inputs["metadata"]["options"]["resources"].default = {
             "num_machines": 1,
-            "num_mpiprocs_per_machine": 1,
+            "num_mpiprocs_per_machine": 1, # use 1 cores per machine by default
         }
         # entry point for parser
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
@@ -69,6 +71,7 @@ class DiffCalculation(CalcJob):
         spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters INPUT.")
         spec.input("kpoints", valid_type=orm.KpointsData, help="The kpoints KPT.")
         spec.input("structure", valid_type=orm.StructureData, help="The input structure STRU.")
+        # STRU contains some parameters that 
 
         # dynamic pseudopotential input port namespace, adapted from aiida-castep
         spec.input_namespace(
@@ -104,17 +107,18 @@ class DiffCalculation(CalcJob):
             needed by the calculation.
         :return: `aiida.common.datastructures.CalcInfo` instance
         """
+        local_copy_list = []
+
         INPUT = folder.get_abs_path("INPUT")
         KPT = folder.get_abs_path("KPT")
         STRU = folder.get_abs_path("STRU")
 
         self.write_input(INPUT)
         self.write_kpoints(KPT)
-        print("self.inputs.structure is: ", self.inputs.structure)
-        print("self.inputs.structure.kinds is: ", self.inputs.structure.kinds)
-        self.local_pseudo_copy_list = [] # will be written in generate_structure inside write_stru
-        self.write_stru(STRU)
-        print("self.local_pseudo_copy_list is:", self.local_pseudo_copy_list)
+
+        # self.local_pseudo_copy_list = [] # will be written in generate_structure inside write_stru
+        local_pseudo_copy_list = self.write_stru(STRU)
+        local_copy_list.extend(local_pseudo_copy_list)
 
         codeinfo = datastructures.CodeInfo()
         # codeinfo.cmdline_params = self.inputs.parameters.cmdline_params(
@@ -129,8 +133,8 @@ class DiffCalculation(CalcJob):
         # Prepare a `CalcInfo` to be returned to the engine
         calcinfo = datastructures.CalcInfo()
         calcinfo.codes_info = [codeinfo]
-        local_copy_list = []
-        local_copy_list.extend(self.local_pseudo_copy_list)
+        
+        
         calcinfo.local_copy_list = local_copy_list
         # calcinfo.local_copy_list = [
         #     (
@@ -162,7 +166,7 @@ class DiffCalculation(CalcJob):
         # may add some validation here, and maybe some conversions
         input_list = [
             "INPUT_PARAMETERS" # parameter list always starts with key word INPUT_PARAMETERS
-            ]
+        ]
 
         for key, value in parameters.items():
             # The longest parameter is 'bessel_descriptor_tolerence' with 27 characters.
@@ -274,7 +278,7 @@ class DiffCalculation(CalcJob):
                 )
 
             kind_names.append(kind.name)
-            atomic_species.append(f'{kind.name.ljust(6)} {kind.mass}   {filename}')
+            atomic_species.append(f'{kind.name.ljust(6)} {kind.mass:^8}  {filename}')
         print("atomic_species is:", atomic_species)
 
         structure_list.extend(atomic_species)
@@ -293,6 +297,12 @@ class DiffCalculation(CalcJob):
         # The lattice constant of the system in unit of Bohr.
         lattice_constant = ["\nLATTICE_CONSTANT"]
         print("structure.cell is:", structure.cell)
+# need to be rechecked!
+        # ang_to_bohr = 1.8897161646320724  # 1 Å ≈ 1.8897 Bohr
+        # lengths_bohr = [np.linalg.norm(v) * ang_to_bohr for v in structure.cell]
+        # lattice_const_in_bohr = max(lengths_bohr)
+        # print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_bohr} Bohr")
+        # print("cell lengths:", structure.cell_lengths)
         lattice_const_in_bohr = 1.8897259886 		# 1.8897259886 Bohr =  1.0 Angstrom
         lattice_constant.append(str(lattice_const_in_bohr))
         structure_list.extend(lattice_constant)
@@ -341,8 +351,6 @@ class DiffCalculation(CalcJob):
         # keyword m: the atom is allowed to move in geometry relaxation calculations
         move_list = [0, 0, 0] # default value for move_x, move_y, move_z
         coordinates = [site.position for site in structure.sites]
-        print("sites is:", structure.sites)
-        print("coordinates is:", coordinates)
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
         # the initial magnetic moment (1.0),
@@ -366,7 +374,7 @@ class DiffCalculation(CalcJob):
                 atom_position_dict[kind_name]["number_of_atoms"] += 1
             atom_position_dict[kind_name]["positions"].append(position)
 
-        print("atom_position_dict is:", atom_position_dict)
+        # print("atom_position_dict is:", atom_position_dict)
 
         # write atom_position_dict into atom_positions
         for kind_name, kind_dict in atom_position_dict.items():
@@ -376,7 +384,7 @@ class DiffCalculation(CalcJob):
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
         
-        print("atom_positions is:", atom_positions)
+        # print("atom_positions is:", atom_positions)
 
         # atom_positions += [
         #     '{0} {1:18.10f} {2:18.10f} {3:18.10f}'.format(site.kind_name.ljust(6), *site_coords)  # pylint: disable=consider-using-f-string
@@ -397,14 +405,14 @@ class DiffCalculation(CalcJob):
         return structure_list
     
     def write_stru(self, stru_file):
-        """Write the structure file STRU."""
-        print("self.inputs.structure is: ", self.inputs.structure)
-        print("self.inputs.structure.kinds is: ", self.inputs.structure.kinds)
+        """
+        Write the structure file STRU.
+        :return: a list of pseudopotential files to be copied
+        """
         structure_content, local_pseudo_copy_list = self.generate_structure(self.inputs.structure, self.inputs.pseudos)
-        self.local_pseudo_copy_list = local_pseudo_copy_list
-        # structure_content = self.generate_structure(self.inputs.structure)
         with open(stru_file, "w") as handle:
             handle.write(structure_content)
+        return local_pseudo_copy_list
     
 
 # structure_data = {
