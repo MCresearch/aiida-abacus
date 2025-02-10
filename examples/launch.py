@@ -8,11 +8,11 @@ from aiida.common.exceptions import NotExistent
 from aiida.plugins import CalculationFactory, DataFactory
 import numpy as np
 
-INPUT_DIR = Path(__file__).resolve().parent / 'input_files'
-print(f'Input files directory: {INPUT_DIR}')
+# INPUT_DIR = Path(__file__).resolve().parent / 'input_files'
+# print(f'Input files directory: {INPUT_DIR}')
 
-DiffParameters = DataFactory("abacus")
-parameters = DiffParameters({"ignore-case": True})
+# DiffParameters = DataFactory("abacus")
+# parameters = DiffParameters({"ignore-case": True})
 # parameters = {"ignore-case": True}
 
 
@@ -28,8 +28,8 @@ computer = orm.load_computer('localhost')
 #         default_calc_job_plugin='abacus'
 #     )
 code = orm.InstalledCode(
-    label='diff', computer=computer,
-    filepath_executable='~/.local/bin/abacus',
+    label='abacus', computer=computer,
+    filepath_executable='/home/cn/.local/bin/abacus',
     default_calc_job_plugin='abacus'
 )
 
@@ -46,7 +46,13 @@ builder = code.get_builder()
 a = 3.092
 c = 5.073
 lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
-structure = StructureData(cell=lattice)
+# structure = StructureData(cell=lattice)
+from ase.build import bulk
+structure = StructureData(ase=bulk('Si', 'fcc', 5.43))
+print(structure.sites)
+for site in structure.sites:
+    print(site.kind_name)
+    print(site.position)
 
 # KPT
 # KpointsData = DataFactory('core.array.kpoints')
@@ -61,10 +67,21 @@ builder.pseudos = pseudo_family.get_pseudos(structure=structure)
 
 
 builder.structure = structure
+print(builder.structure.get_kind_names())
 builder.kpoints = kpoints
 builder.metadata.description = 'Test job submission with the aiida_abacus plugin'
 
+input_parameters = {
+    'ecutwfc': 100,
+    'scf_thr': 1e-4,
+}
+parameters=Dict(dict=input_parameters)
+
 # Run the calculation & parse results
-result = engine.run(builder, parameters=parameters)
-computed_diff = result['abacus'].get_content()
-print(f'Computed diff between files:\n{computed_diff}')
+results, node = engine.run.get_node(builder, parameters=parameters)
+# print(results)
+# print(results['retrieved'])
+# computed_diff = result['misc'].get_content()
+# print(f'Computed diff between files:\n{computed_diff}')
+
+print("Calc launch over.")
