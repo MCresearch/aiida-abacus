@@ -13,7 +13,7 @@ from aiida.plugins import CalculationFactory
 
 import re
 
-DiffCalculation = CalculationFactory("abacus.abacus")
+AbacusCalculation = CalculationFactory("abacus.abacus")
 
 
 class DiffParser(Parser):
@@ -25,14 +25,14 @@ class DiffParser(Parser):
         """
         Initialize Parser instance
 
-        Checks that the ProcessNode being passed was produced by a DiffCalculation.
+        Checks that the ProcessNode being passed was produced by a AbacusCalculation.
 
         :param node: ProcessNode of calculation
         :param type node: :class:`aiida.orm.nodes.process.process.ProcessNode`
         """
         super().__init__(node)
-        if not issubclass(node.process_class, DiffCalculation):
-            raise exceptions.ParsingError("Can only parse DiffCalculation")
+        if not issubclass(node.process_class, AbacusCalculation):
+            raise exceptions.ParsingError("Can only parse AbacusCalculation")
 
     def parse(self, **kwargs):
         """

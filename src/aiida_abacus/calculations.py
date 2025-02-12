@@ -16,12 +16,10 @@ from aiida_pseudo.data.pseudo.upf import UpfData
 
 import numpy as np
 
-# DiffParameters = DataFactory("abacus.abacus")
 LegacyUpfData = DataFactory('core.upf')
-# UpfData = DataFactory('pseudo.upf')
 
 
-class DiffCalculation(CalcJob):
+class AbacusCalculation(CalcJob):
     """
     AiiDA calculation plugin wrapping ABACUS calculation.
 
