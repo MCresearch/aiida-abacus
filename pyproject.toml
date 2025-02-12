@@ -48,7 +48,7 @@ Source = "https://github.com/MCresearch/aiida-abacus"
 "abacus.abacus" = "aiida_abacus.calculations:AbacusCalculation"
 
 [project.entry-points."aiida.parsers"]
-"abacus.abacus" = "aiida_abacus.parsers:DiffParser"
+"abacus.abacus" = "aiida_abacus.parsers:AbacusParser"
 
 [project.entry-points."aiida.cmdline.data"]
 "abacus" = "aiida_abacus.cli:data_cli"

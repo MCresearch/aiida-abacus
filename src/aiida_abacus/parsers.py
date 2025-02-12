@@ -16,7 +16,7 @@ import re
 AbacusCalculation = CalculationFactory("abacus.abacus")
 
 
-class DiffParser(Parser):
+class AbacusParser(Parser):
     """
     Parser class for parsing output of calculation.
     """
