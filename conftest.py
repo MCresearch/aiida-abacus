@@ -13,4 +13,4 @@ def clear_database_auto(clear_database):  # pylint: disable=unused-argument
 @pytest.fixture(scope="function")
 def abacus_code(aiida_local_code_factory):
     """Get a abacus code."""
-    return aiida_local_code_factory(executable="diff", entry_point="abacus")
+    return aiida_local_code_factory(executable="abacus", entry_point="abacus")

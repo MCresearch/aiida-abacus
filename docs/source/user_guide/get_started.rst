@@ -38,5 +38,5 @@ If you have already set up your own aiida_abacus code using
 Available calculations
 ++++++++++++++++++++++
 
-.. aiida-calcjob:: DiffCalculation
+.. aiida-calcjob:: AbacusCalculation
     :module: aiida_abacus.calculations

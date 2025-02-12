@@ -19,7 +19,7 @@ computer = orm.load_computer('localhost')
 # except NotExistent:
 #     # Setting up code via python API (or use "verdi code setup")
 #     code = orm.InstalledCode(
-#         label='diff', computer=computer,
+#         label='abacus', computer=computer,
 #         filepath_executable='abacus',
 #         default_calc_job_plugin='abacus'
 #     )

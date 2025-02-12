@@ -2,9 +2,9 @@
 Helper functions for setting up
 
  1. An AiiDA localhost computer
- 2. A "diff" code on localhost
+ 2. A "abacus" code on localhost
 
-Note: Point 2 is made possible by the fact that the ``diff`` executable is
+Note: Point 2 is made possible by the fact that the ``abacus`` executable is
 available in the PATH on almost any UNIX system.
 """
 
@@ -17,7 +17,7 @@ from aiida.orm import Code, Computer
 LOCALHOST_NAME = "localhost-test"
 
 executables = {
-    "abacus": "diff",
+    "abacus": "abacus",
 }
 
 
@@ -54,7 +54,7 @@ def get_computer(name=LOCALHOST_NAME, workdir=None):
 
         computer = Computer(
             label=name,
-            description="localhost computer set up by aiida_diff tests",
+            description="localhost computer set up by aiida_abacus tests",
             hostname=name,
             workdir=workdir,
             transport_type="core.local",

@@ -42,7 +42,7 @@ docs = [
 Source = "https://github.com/MCresearch/aiida-abacus"
 
 [project.entry-points."aiida.data"]
-"abacus" = "aiida_abacus.data:DiffParameters"
+"abacus" = "aiida_abacus.data:AbacusParameters"
 
 [project.entry-points."aiida.calculations"]
 "abacus.abacus" = "aiida_abacus.calculations:AbacusCalculation"
