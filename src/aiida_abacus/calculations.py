@@ -41,6 +41,7 @@ class DiffCalculation(CalcJob):
         super().define(spec)
 
         # set default values for AiiDA options
+        spec.inputs['metadata']['options']['withmpi'].default = True # use mpi by default
         spec.inputs["metadata"]["options"]["resources"].default = {
             "num_machines": 1,
             "num_mpiprocs_per_machine": 1, # use 1 cores per machine by default
@@ -69,6 +70,7 @@ class DiffCalculation(CalcJob):
         # see https://abacus.deepmodeling.com/en/latest/quick_start/input.html for detail
 
         spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters INPUT.")
+
         spec.input("kpoints", valid_type=orm.KpointsData, help="The kpoints KPT.")
         spec.input("structure", valid_type=orm.StructureData, help="The input structure STRU.")
         # STRU contains some parameters that 
@@ -287,7 +289,7 @@ class DiffCalculation(CalcJob):
 
         # NUMERICAL_ORBITAL section
         # Numerical atomic orbitals are only needed for LCAO calculations.
-        # This section will be neglected in calcultions with plane wave basis.
+        # This section will be neglected in calcultions with plane wave basis(PW).
         # structure_list.append("\nNUMERICAL_ORBITAL\n")
         # for orbital in structure["numerical_orbital"]:
         #     structure_list.append(orbital)
@@ -298,20 +300,28 @@ class DiffCalculation(CalcJob):
         lattice_constant = ["\nLATTICE_CONSTANT"]
         print("structure.cell is:", structure.cell)
 # need to be rechecked!
-        # ang_to_bohr = 1.8897161646320724  # 1 Å ≈ 1.8897 Bohr
-        # lengths_bohr = [np.linalg.norm(v) * ang_to_bohr for v in structure.cell]
-        # lattice_const_in_bohr = max(lengths_bohr)
-        # print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_bohr} Bohr")
-        # print("cell lengths:", structure.cell_lengths)
+        # LATTICE_CONSTANT represents a length for the overall scaling of the lattice.
+        # Note that 1 Angstrom = 1.8897261258369282 bohr,
+        # and writing a decimal starting with 1.8 here means that
+        # the following LATTICE_VECTORS section can be written in lattice units of Angstrom.
+
+        ang_to_bohr = 1.8897161646320724  # 1 Å ≈ 1.8897 Bohr
+        lengths_in_ang = [np.linalg.norm(v) for v in structure.cell]
+        lengths_in_bohr = [ang_to_bohr * length for length in lengths_in_ang]
+        lattice_const_in_ang = max(lengths_in_ang)
+        lattice_const_in_bohr = max(lengths_in_bohr)
+        print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_ang} Angstrom")
+        
+        print("cell lengths:", structure.cell_lengths)
+        print(f"lattice_const in bohr {lattice_const_in_bohr} Bohr")
+        # from ase/io/onetep.py
+        # 1.889726134583548707935
         lattice_const_in_bohr = 1.8897259886 		# 1.8897259886 Bohr =  1.0 Angstrom
         lattice_constant.append(str(lattice_const_in_bohr))
         structure_list.extend(lattice_constant)
 
         # LATTICE_VECTORS section
         # This section is only relevant when latname (see input parameters) is used to specify the Bravais lattice type.
-        # structure_list.append("\nLATTICE_VECTORS\n")
-        # for vector in structure["lattice_vectors"]:
-        #     structure_list.append(" ".join(map(str, vector)))
         lattice_vectors = ["\nLATTICE_VECTORS"]
         for vector in structure.cell:
             lattice_vectors.extend([f"{vector[0]:20}{vector[1]:20}{vector[2]:20}"])
@@ -325,12 +335,6 @@ class DiffCalculation(CalcJob):
             # next lines are atom-specific information, processed in the following code
         ]
 
-        # structure_list.append("\nATOMIC_POSITIONS\n")
-        # structure_list.append(structure["atomic_positions"]["coordinate_type"])
-        # for element, magnetism, count, positions in structure["atomic_positions"]["atoms"]:
-        #     structure_list.append(f"{element} {magnetism} {count}")
-        #     for pos in positions:
-        #         structure_list.append(" ".join(map(str, pos)))
         # atom position dict consists of 4 parts:
         # part 1 Element type
         # part 2 magnetism (Be careful: value 1.0 refers to 1.0 bohr mag, but not fully spin up !!!)
@@ -362,6 +366,7 @@ class DiffCalculation(CalcJob):
                 'm', # m or NO key word: three numbers, which take value in 0 or 1,
                      # control how the atom move in geometry relaxation calculations. 
                 *move_list
+                
             ]
             if kind_name not in atom_position_dict:
                 atom_position_dict[kind_name] = {
