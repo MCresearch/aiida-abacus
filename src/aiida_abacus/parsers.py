@@ -43,9 +43,7 @@ class DiffParser(Parser):
         # output_filename = self.node.get_option("output_filename")
         output_folder = self.retrieved
         output_filename = "OUT.aiida/running_scf.log"
-        # print("output_filename", output_filename)
         
-
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
         print("files_retrieved", files_retrieved)
@@ -63,17 +61,14 @@ class DiffParser(Parser):
         # with self.retrieved.open(output_filename, "rb") as handle:
         #     output_node = SinglefileData(file=handle)
 
-        # patter to search for pattern in output file
-        # look for " !FINAL_ETOT_IS -215.5056984090303 eV"
+        # patter to search for total energy in output file
+        # look for " !FINAL_ETOT_IS xxx eV"
         pattern = r"!FINAL_ETOT_IS\s+(-?\d+\.\d+)\s+eV"
-        pattern_compile = re.compile(pattern)
         # search for pattern in output file
         self.logger.info(f"Searching for pattern '{pattern}'")
         self.logger.info(f"Contents of file: {output}")
-        res = pattern_compile.search(output)
-        final_energy_total = None
-        if res:
-            final_energy_total = float(res.group(1))
+
+        final_energy_total = self._parse_energy(output, pattern)
         # update output_node with final_energy_total
         # valid_type=orm.Dict
         # final_energy_total = 1
@@ -83,3 +78,19 @@ class DiffParser(Parser):
         self.out("misc", output_node)
 
         return ExitCode(0)
+    
+    def _parse_energy(self, output, pattern):
+        """
+        Parse energy from output file.
+
+        :param output: output file content
+        :param pattern: regular expression pattern to search for
+        :returns: energy value
+        """
+        pattern_compile = re.compile(pattern)
+        res = pattern_compile.search(output)
+        if res:
+            energy = float(res.group(1))
+        else:
+            energy = None
+        return energy
