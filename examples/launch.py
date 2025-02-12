@@ -13,19 +13,21 @@ import numpy as np
 ###
 # set up code
 computer = orm.load_computer('localhost')
+
 # try:
-#     code = orm.load_code('diff@localhost')
+#     code = orm.load_code('abacus@localhost')
 # except NotExistent:
 #     # Setting up code via python API (or use "verdi code setup")
 #     code = orm.InstalledCode(
 #         label='diff', computer=computer,
-#         filepath_executable='/usr/bin/diff',
+#         filepath_executable='abacus',
 #         default_calc_job_plugin='abacus'
 #     )
+
 code = orm.InstalledCode(
     label='abacus', computer=computer,
     filepath_executable='abacus',
-    default_calc_job_plugin='abacus'
+    default_calc_job_plugin='abacus.abacus'
 )
 
 

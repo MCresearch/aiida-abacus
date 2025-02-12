@@ -13,7 +13,7 @@ from aiida.plugins import CalculationFactory
 
 import re
 
-DiffCalculation = CalculationFactory("abacus")
+DiffCalculation = CalculationFactory("abacus.abacus")
 
 
 class DiffParser(Parser):
