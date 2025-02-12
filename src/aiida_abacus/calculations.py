@@ -145,7 +145,7 @@ class DiffCalculation(CalcJob):
         # retrieve the output folder OUT.aiida
         calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER]
         # print("calcinfo is:", calcinfo)
-        print("retrieve:", calcinfo.retrieve_list)
+        print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo
     
