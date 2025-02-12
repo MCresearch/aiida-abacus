@@ -27,6 +27,7 @@ class DiffCalculation(CalcJob):
 
     """
 
+    # Here we define some default paths for the input and output files of the calculation
     _PSEUDO_SUBFOLDER = "./pseudo/" # default pesudopotential folder
     _ORBITAL_SUBFOLDER = "./orbital/" # default orbital folder
     _OUTPUT_SUFFIX = "aiida" # default output suffix
@@ -41,7 +42,6 @@ class DiffCalculation(CalcJob):
         super().define(spec)
 
         # set default values for AiiDA options
-        spec.inputs['metadata']['options']['withmpi'].default = True # use mpi by default
         spec.inputs["metadata"]["options"]["resources"].default = {
             "num_machines": 1,
             "num_mpiprocs_per_machine": 1, # use 1 cores per machine by default
@@ -49,22 +49,9 @@ class DiffCalculation(CalcJob):
         # entry point for parser
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
 
-        # new ports
-        # spec.input("metadata.options.output_filename", valid_type=str, default="patch.diff")
-        # spec.input(
-        #     "parameters",
-        #     valid_type=DiffParameters,
-        #     help="Command line parameters for diff",
-        # )
-        # spec.input("file1", valid_type=SinglefileData, help="First file to be compared.")
-        # spec.input("file2", valid_type=SinglefileData, help="Second file to be compared.")
-        # spec.output(
-        #     "abacus",
-        #     valid_type=SinglefileData,
-        #     help="diff between file1 and file2.",
-        # )
+        spec.input('metadata.options.withmpi', valid_type=bool, default=True) # use mpi by default
 
-        spec.input('metadata.options.withmpi', valid_type=bool, default=True)
+        # new ports
 
         # structural data for 3 Input file for ABACUS calculation
         # see https://abacus.deepmodeling.com/en/latest/quick_start/input.html for detail
@@ -73,7 +60,10 @@ class DiffCalculation(CalcJob):
 
         spec.input("kpoints", valid_type=orm.KpointsData, help="The kpoints KPT.")
         spec.input("structure", valid_type=orm.StructureData, help="The input structure STRU.")
-        # STRU contains some parameters that 
+# features needed:
+        # STRU contains some parameters that do not belong to INPUT
+        # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
+        # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
         # dynamic pseudopotential input port namespace, adapted from aiida-castep
         spec.input_namespace(
@@ -87,6 +77,7 @@ class DiffCalculation(CalcJob):
             valid_type=(LegacyUpfData, UpfData),
             dynamic=True,
         )
+
         # misc stands for miscellaneous, which is some of
         # the scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.
         # extracted from the output file OUT.aiida/running_scf.log
@@ -233,8 +224,6 @@ class DiffCalculation(CalcJob):
         :param pseudos: a dictionary of pseudopotential nodes
         :return: the content of the input file STRU & a list of pseudopotential files to be copied"""
         # may add some validation here, and maybe some conversions
-        print("structure is:", structure)
-        print("structure.kinds is:", structure.kinds)
 
         # This is the atom file containing all the information about the lattice structure.
         structure_list = []
@@ -258,8 +247,7 @@ class DiffCalculation(CalcJob):
         kind_names = []
         # I add the pseudopotential files to the list of files to be copied
         for kind in structure.kinds:
-            print("kind is:", kind)
-            print("kind.name is:", kind.name)
+
             # This should not give errors, I already checked before that
             # the list of keys of pseudos and kinds coincides
             pseudo = pseudos[kind.name]
@@ -281,7 +269,6 @@ class DiffCalculation(CalcJob):
 
             kind_names.append(kind.name)
             atomic_species.append(f'{kind.name.ljust(6)} {kind.mass:^8}  {filename}')
-        print("atomic_species is:", atomic_species)
 
         structure_list.extend(atomic_species)
 
@@ -298,7 +285,7 @@ class DiffCalculation(CalcJob):
         # LATTICE_CONSTANT section
         # The lattice constant of the system in unit of Bohr.
         lattice_constant = ["\nLATTICE_CONSTANT"]
-        print("structure.cell is:", structure.cell)
+        # print("structure.cell is:", structure.cell)
 # need to be rechecked!
         # LATTICE_CONSTANT represents a length for the overall scaling of the lattice.
         # Note that 1 Angstrom = 1.8897261258369282 bohr,
@@ -306,14 +293,15 @@ class DiffCalculation(CalcJob):
         # the following LATTICE_VECTORS section can be written in lattice units of Angstrom.
 
         ang_to_bohr = 1.8897161646320724  # 1 Å ≈ 1.8897 Bohr
-        lengths_in_ang = [np.linalg.norm(v) for v in structure.cell]
-        lengths_in_bohr = [ang_to_bohr * length for length in lengths_in_ang]
-        lattice_const_in_ang = max(lengths_in_ang)
-        lattice_const_in_bohr = max(lengths_in_bohr)
-        print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_ang} Angstrom")
+        # lengths_in_ang = [np.linalg.norm(v) for v in structure.cell]
+        # lengths_in_bohr = [ang_to_bohr * length for length in lengths_in_ang]
+        # lattice_const_in_ang = max(lengths_in_ang)
+        # lattice_const_in_bohr = max(lengths_in_bohr)
+        # print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_ang} Angstrom")
         
-        print("cell lengths:", structure.cell_lengths)
-        print(f"lattice_const in bohr {lattice_const_in_bohr} Bohr")
+        # print("cell lengths:", structure.cell_lengths)
+        # print(f"lattice_const in bohr {lattice_const_in_bohr} Bohr")
+
         # from ase/io/onetep.py
         # 1.889726134583548707935
         lattice_const_in_bohr = 1.8897259886 		# 1.8897259886 Bohr =  1.0 Angstrom
@@ -355,6 +343,7 @@ class DiffCalculation(CalcJob):
         # keyword m: the atom is allowed to move in geometry relaxation calculations
         move_list = [0, 0, 0] # default value for move_x, move_y, move_z
         coordinates = [site.position for site in structure.sites]
+
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
         # the initial magnetic moment (1.0),
@@ -365,8 +354,8 @@ class DiffCalculation(CalcJob):
                 *site_coords,
                 'm', # m or NO key word: three numbers, which take value in 0 or 1,
                      # control how the atom move in geometry relaxation calculations. 
-                *move_list
-                
+                *move_list,
+                # Other key word parameters can be added here.
             ]
             if kind_name not in atom_position_dict:
                 atom_position_dict[kind_name] = {
@@ -379,7 +368,6 @@ class DiffCalculation(CalcJob):
                 atom_position_dict[kind_name]["number_of_atoms"] += 1
             atom_position_dict[kind_name]["positions"].append(position)
 
-        # print("atom_position_dict is:", atom_position_dict)
 
         # write atom_position_dict into atom_positions
         for kind_name, kind_dict in atom_position_dict.items():
@@ -389,25 +377,14 @@ class DiffCalculation(CalcJob):
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
         
-        # print("atom_positions is:", atom_positions)
 
-        # atom_positions += [
-        #     '{0} {1:18.10f} {2:18.10f} {3:18.10f}'.format(site.kind_name.ljust(6), *site_coords)  # pylint: disable=consider-using-f-string
-        #     for site, site_coords in zip(structure.sites, coordinates)
-        # ]
-        # atom_positions.append("\n")
         structure_list.extend(atom_positions)
 
         # Join the structure_list into a single string
-        print("structure_list is:", structure_list)
+        # print("structure_list is:", structure_list)
         structure_content = "\n".join(structure_list)
         return structure_content, local_copy_list_to_append
 
-        # for site in structure.sites:
-        #     # The longest parameter is 'bessel_descriptor_tolerence' with 27 characters.
-        #     structure_list.append(f"{site.kind_name:<30}{site.position[0]:<20}{site.position[1]:<20}{site.position[2]:<20}")
-        # structure_content = "\n".join(structure_list)
-        return structure_list
     
     def write_stru(self, stru_file):
         """
@@ -418,32 +395,3 @@ class DiffCalculation(CalcJob):
         with open(stru_file, "w") as handle:
             handle.write(structure_content)
         return local_pseudo_copy_list
-    
-
-# structure_data = {
-#     "atomic_species": [
-#         {"label": "Si", "mass": 28.00, "pseudo_file": "Si_ONCV_PBE-1.0.upf", "pseudo_type": "upf201"}
-#     ],
-#     "numerical_orbital": [
-#         "Si_gga_8au_60Ry_2s2p1d.orb"
-#     ],
-#     "lattice_constant": 10.2,
-#     "lattice_vectors": [
-#         [0.5, 0.5, 0.0],
-#         [0.5, 0.0, 0.5],
-#         [0.0, 0.5, 0.5]
-#     ],
-#     "atomic_positions": {
-#         "coordinate_type": "Direct",
-#         "atoms": [
-#             ("Si", 0.0, 2, [
-#                 [0.00, 0.00, 0.00, 0, 0, 0],
-#                 [0.25, 0.25, 0.25, 1, 1, 1]
-#             ])
-#         ]
-#     }
-# }
-
-# # Generate the structure file content
-# file_content = generate_structure(structure_data)
-# print(file_content)
