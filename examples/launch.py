@@ -9,12 +9,6 @@ from aiida.common.exceptions import NotExistent
 from aiida.plugins import CalculationFactory, DataFactory
 import numpy as np
 
-# INPUT_DIR = Path(__file__).resolve().parent / 'input_files'
-# print(f'Input files directory: {INPUT_DIR}')
-
-# DiffParameters = DataFactory("abacus")
-# parameters = DiffParameters({"ignore-case": True})
-# parameters = {"ignore-case": True}
 
 ###
 # set up code
@@ -42,7 +36,7 @@ builder.metadata.options = {
         'num_machines': 1,
         "num_mpiprocs_per_machine": 1, # use 1 cores per machine
     },
-    'max_wallclock_seconds': 180,
+    'max_wallclock_seconds': 180, # how long it can run before it should be killed
     # 'withmpi': False, # Set withmpi to False in case abacus was compiled without MPI support.
 }
 
@@ -109,6 +103,31 @@ Si 			#Name of element
 0.00 0.00 0.00 0 0 0	#x,y,z, move_x, move_y, move_z
 0.25 0.25 0.25 1 1 1
 """
+# structure_data = {
+#     "atomic_species": [
+#         {"label": "Si", "mass": 28.00, "pseudo_file": "Si_ONCV_PBE-1.0.upf", "pseudo_type": "upf201"}
+#     ],
+#     "numerical_orbital": [
+#         "Si_gga_8au_60Ry_2s2p1d.orb"
+#     ],
+#     "lattice_constant": 10.2,
+#     "lattice_vectors": [
+#         [0.5, 0.5, 0.0],
+#         [0.5, 0.0, 0.5],
+#         [0.0, 0.5, 0.5]
+#     ],
+#     "atomic_positions": {
+#         "coordinate_type": "Direct",
+#         "atoms": [
+#             ("Si", 0.0, 2, [
+#                 [0.00, 0.00, 0.00, 0, 0, 0],
+#                 [0.25, 0.25, 0.25, 1, 1, 1]
+#             ])
+#         ]
+#     }
+# }
+
+
 # STRU
 # adadpted from aiida-vasp
 # StructureData = DataFactory('core.structure')
@@ -144,11 +163,13 @@ builder.kpoints = kpoints
 builder.metadata.description = 'Test job submission with the aiida_abacus plugin'
 
 
-# Run the calculation & parse results
+# Run the calculation & print results
 results, node = engine.run.get_node(builder, parameters=parameters)
-# print(results)
-# print(results['retrieved'])
-# computed_diff = result['misc'].get_content()
-# print(f'Computed diff between files:\n{computed_diff}')
+misc = results['misc'].get_dict()
+print(f'Miscellaneous: {misc}')
+retrieved = results['retrieved']
+print(f'Retrieved files: {retrieved.list_object_names()}')
+remote_folder = results['remote_folder'].entry_point #.get_remote_path()
+print(f'Remote folder entry_point: {remote_folder}')
 
 print("Calc launch over.")
