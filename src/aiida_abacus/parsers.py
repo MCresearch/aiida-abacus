@@ -47,6 +47,11 @@ class AbacusParser(Parser):
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
         print("files_retrieved", files_retrieved)
+        # check that 'OUT.aiida' folder is present
+        files_expected = ["OUT.aiida"]
+        if not set(files_expected) <= set(files_retrieved):
+            self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
+            return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
         # files_expected = [output_filename]
         # Note: set(A) <= set(B) checks whether A is a subset of B
         # if not set(files_expected) <= set(files_retrieved):
