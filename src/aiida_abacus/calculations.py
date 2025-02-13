@@ -107,14 +107,11 @@ class AbacusCalculation(CalcJob):
         self.write_input(INPUT)
         self.write_kpoints(KPT)
 
-        # self.local_pseudo_copy_list = [] # will be written in generate_structure inside write_stru
         local_pseudo_copy_list = self.write_stru(STRU)
         local_copy_list.extend(local_pseudo_copy_list)
 
         codeinfo = datastructures.CodeInfo()
-        # codeinfo.cmdline_params = self.inputs.parameters.cmdline_params(
-        #     file1_name=self.inputs.file1.filename, file2_name=self.inputs.file2.filename
-        # )
+
 
         # no cmdline params needed
         codeinfo.cmdline_params = []
@@ -127,18 +124,6 @@ class AbacusCalculation(CalcJob):
         
         
         calcinfo.local_copy_list = local_copy_list
-        # calcinfo.local_copy_list = [
-        #     (
-        #         self.inputs.file1.uuid,
-        #         self.inputs.file1.filename,
-        #         self.inputs.file1.filename,
-        #     ),
-        #     (
-        #         self.inputs.file2.uuid,
-        #         self.inputs.file2.filename,
-        #         self.inputs.file2.filename,
-        #     ),
-        # ]
 
         # retrieve the output folder OUT.aiida
         calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER]
@@ -239,15 +224,20 @@ class AbacusCalculation(CalcJob):
         # This section provides information about the type of chemical elements contained the unit cell. 
         # structure_list.append("ATOMIC_SPECIES\n")
         atomic_species = ["ATOMIC_SPECIES"]
-        # for species in structure_data["atomic_species"]:
-        #     structure_list.append(f"{species['label']} {species['mass']} {species['pseudo_file']} {species['pseudo_type']}")
-        # I keep track of the order of species
+
         kind_names = []
-        # I add the pseudopotential files to the list of files to be copied
+        # append the pseudopotential files to the list of files to be copied
         for kind in structure.kinds:
 
             # This should not give errors, I already checked before that
             # the list of keys of pseudos and kinds coincides
+# need validation here
+            # structure_kinds = set(value['structure'].get_kind_names())
+            # pseudo_kinds = set(value['pseudos'].keys())
+
+            # if structure_kinds != pseudo_kinds:
+            #     return f'The `pseudos` specified and structure kinds do not match: {pseudo_kinds} vs {structure_kinds}'
+            
             pseudo = pseudos[kind.name]
             if kind.is_alloy or kind.has_vacancies:
                 raise exceptions.InputValidationError(
