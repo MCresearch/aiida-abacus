@@ -59,7 +59,7 @@ Here goes a quick demo of how to submit a calculation using this plugin:
 ```shell
 verdi daemon start     # make sure the daemon is running
 cd examples
-./launch.py        # run example calculation
+verdi run launch.py        # run example calculation
 verdi process list -a  # check record of calculation
 ```
 

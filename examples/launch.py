@@ -75,8 +75,7 @@ input_parameters = {
     # STRU
     # 'lattice_constant': 10.2,
 }
-# revert input_parameters
-# input_parameters = reversed(input_parameters)
+
 parameters=Dict(dict=input_parameters)
 
 
