@@ -7,7 +7,7 @@ Register parsers via the "aiida.parsers" entry point in setup.json.
 from aiida import orm
 from aiida.common import exceptions
 from aiida.engine import ExitCode
-from aiida.orm import SinglefileData
+from aiida.orm import SinglefileData, Str
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
@@ -40,9 +40,8 @@ class AbacusParser(Parser):
 
         :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
         """
-        # output_filename = self.node.get_option("output_filename")
         output_folder = self.retrieved
-        output_filename = "OUT.aiida/running_scf.log"
+        running_scf_log_filename = "OUT.aiida/running_scf.log"
         
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
@@ -59,10 +58,10 @@ class AbacusParser(Parser):
         #     return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
 
         # add output file
-        with output_folder.open(output_filename, "r") as handle:
+        with output_folder.open(running_scf_log_filename, "r") as handle:
             output = handle.read()
         # print("output", output)
-        self.logger.info(f"Parsing '{output_filename}'")
+        self.logger.info(f"Parsing '{running_scf_log_filename}'")
         # with self.retrieved.open(output_filename, "rb") as handle:
         #     output_node = SinglefileData(file=handle)
 
@@ -74,13 +73,27 @@ class AbacusParser(Parser):
         self.logger.info(f"Contents of file: {output}")
 
         final_energy_total = self._parse_energy(output, pattern)
-        # update output_node with final_energy_total
+
+        # parse miscellaneaous "misc"
+        # update misc_node with final_energy_total
         # valid_type=orm.Dict
-        # final_energy_total = 1
+
         out_dict = {"final_energy_total": final_energy_total}
         print("out_dict", out_dict)
-        output_node = orm.Dict(dict=out_dict)
-        self.out("misc", output_node)
+        misc_node = orm.Dict(dict=out_dict)
+        self.out("misc", misc_node)
+
+        # std output and err
+        output_filename = self.node.get_option("output_filename")
+        with self.retrieved.open(output_filename, "rb") as handle:
+            stdout_node = Str(handle)
+        self.out("stdout", stdout_node)
+
+        error_filename = self.node.get_option("scheduler_stderr")
+        with self.retrieved.open(error_filename, "rb") as handle:
+            stderr_node = Str(handle)
+        self.out("stderr", stderr_node)
+
 
         return ExitCode(0)
     

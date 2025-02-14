@@ -9,7 +9,7 @@ from aiida.common import datastructures, exceptions
 from aiida.common.utils import get_unique_filename
 from aiida.engine import CalcJob
 from aiida import orm
-from aiida.orm import SinglefileData
+from aiida.orm import SinglefileData, Str
 from aiida.plugins import DataFactory
 
 from aiida_pseudo.data.pseudo.upf import UpfData
@@ -33,6 +33,8 @@ class AbacusCalculation(CalcJob):
     _DEFAULT_RETRIEVE_LIST = [
         _OUTPUT_SUBFOLDER
     ]
+    _DEFAULT_STDOUT_NAME = "abacus.out"
+    _DEFAULT_STDERR_NAME = "abacus.err"
 
     @classmethod
     def define(cls, spec):
@@ -46,6 +48,11 @@ class AbacusCalculation(CalcJob):
         }
         # entry point for parser
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
+        # default screen stdout and stderr
+        # _scheduler-stdout.txt and _scheduler-stderr.txt
+        spec.inputs["metadata"]["options"]["output_filename"].default = cls._DEFAULT_STDOUT_NAME # screen stdout
+        spec.inputs["metadata"]["options"]["scheduler_stderr"].default = cls._DEFAULT_STDERR_NAME # screen stderr
+
 
         spec.input('metadata.options.withmpi', valid_type=bool, default=True) # use mpi by default
 
@@ -83,6 +90,9 @@ class AbacusCalculation(CalcJob):
         spec.output("misc", valid_type=orm.Dict,
                     help="The scalar outputs or"
                     "small vectors (e.g., energy, forces, stress) of the calculation.")
+        
+        spec.output("stdout", valid_type=Str, help="standard output content")
+        spec.output("stderr", valid_type=Str, help="standard error content")
 
         spec.exit_code(
             300,
@@ -116,7 +126,7 @@ class AbacusCalculation(CalcJob):
         # no cmdline params needed
         codeinfo.cmdline_params = []
         codeinfo.code_uuid = self.inputs.code.uuid
-        # codeinfo.stdout_name = self.metadata.options.output_filename
+        codeinfo.stdout_name = self.metadata.options.output_filename
 
         # Prepare a `CalcInfo` to be returned to the engine
         calcinfo = datastructures.CalcInfo()
@@ -126,7 +136,7 @@ class AbacusCalculation(CalcJob):
         calcinfo.local_copy_list = local_copy_list
 
         # retrieve the output folder OUT.aiida
-        calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER]
+        calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER, self._DEFAULT_STDOUT_NAME, self._DEFAULT_STDERR_NAME]
         # print("calcinfo is:", calcinfo)
         print("to be retrieved:", calcinfo.retrieve_list)
 
