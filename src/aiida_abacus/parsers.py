@@ -42,14 +42,14 @@ class AbacusParser(Parser):
         :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
         """
         output_folder = self.retrieved
-        # print(AbacusCalculation.get_default_calc_paths())
-        running_scf_log_filename = Path("OUT.aiida") / "running_scf.log"
+        calc_paths = AbacusCalculation.get_default_calc_paths()
+        running_scf_log_filename = Path(calc_paths["OUTPUT_SUBFOLDER"]) / "running_scf.log"
         
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
         print("files_retrieved", files_retrieved)
         # check that 'OUT.aiida' folder is present
-        files_expected = ["OUT.aiida", "abacus_output"]
+        files_expected = [calc_paths["OUTPUT_SUBFOLDER"], calc_paths["ABACUS_OUTPUT"]]
         if not set(files_expected) <= set(files_retrieved):
             self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
             return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
@@ -64,8 +64,7 @@ class AbacusParser(Parser):
             output = handle.read()
         # print("output", output)
         self.logger.info(f"Parsing '{running_scf_log_filename}'")
-        # with self.retrieved.open(output_filename, "rb") as handle:
-        #     output_node = SinglefileData(file=handle)
+
 
         # patter to search for total energy in output file
         # look for " !FINAL_ETOT_IS xxx eV"
@@ -77,7 +76,6 @@ class AbacusParser(Parser):
         final_energy_total = self._parse_energy(output, pattern)
 
         # parse miscellaneaous "misc"
-        # update misc_node with final_energy_total
         # valid_type=orm.Dict
 
         out_dict = {"final_energy_total": final_energy_total}
@@ -86,7 +84,7 @@ class AbacusParser(Parser):
         self.out("misc", misc_node)
 
         # raw abacus_output content str
-        abacus_output_filename = "abacus_output"
+        abacus_output_filename = calc_paths["ABACUS_OUTPUT"]
         with self.retrieved.open(abacus_output_filename, "rb") as handle:
             abacus_output_node = Str(handle)
         self.out("abacus_output", abacus_output_node)
