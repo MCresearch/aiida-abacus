@@ -25,10 +25,7 @@ pip install .
 # or pip install -e .
 # if you want to make a change to the plugin
 ```
-<!-- ```
-git clone https://github.com/MCresearch/aiida-abacus.git
-pip install aiida-abacus
-``` -->
+
 
 ### Pseudopotentials
 We use the [`aiida-pseudo` plugin](https://pypi.org/project/aiida-pseudo/) to install and manage pseudopotentials.

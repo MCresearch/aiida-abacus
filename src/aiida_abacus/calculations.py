@@ -61,12 +61,24 @@ class AbacusCalculation(CalcJob):
         # structural data for 3 Input file for ABACUS calculation
         # see https://abacus.deepmodeling.com/en/latest/quick_start/input.html for detail
 
+        # parameters, which is a Dict
+        # will be written into INPUT file after validation
         spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters INPUT.")
 
+        # kpoints, which is a KpointsData
+        # will be written into KPT file after validation
         spec.input("kpoints", valid_type=orm.KpointsData, help="The kpoints KPT.")
+
+        # structure, which is a StructureData
+        # and some other parameters (Dict)
+        # will be written into STRU file after validation
         spec.input("structure", valid_type=orm.StructureData, help="The input structure STRU.")
-# features needed:
-        # STRU contains some parameters that do not belong to INPUT
+        # following ports are some parameters that do not belong to INPUT,
+        # but required by STRU!
+
+        # Several other parameters could be defined after the atom position using key words.
+        # See https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html#more-key-words
+        # for details.
         # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
         # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
@@ -123,9 +135,11 @@ class AbacusCalculation(CalcJob):
         codeinfo = datastructures.CodeInfo()
 
 
-        # no cmdline params needed
+        # To run ABACUS, no cmdline params needed
         codeinfo.cmdline_params = []
         codeinfo.code_uuid = self.inputs.code.uuid
+        # The stdout_name attribute tells the engine where the output of the executable should be redirected to.
+        # Here set to the value of the output_filename option.
         codeinfo.stdout_name = self.metadata.options.output_filename
 
         # Prepare a `CalcInfo` to be returned to the engine
