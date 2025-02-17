@@ -91,18 +91,6 @@ class AbacusParser(Parser):
             abacus_output_node = Str(handle)
         self.out("abacus_output", abacus_output_node)
         
-        # Scheduler part
-        # std output and err stream content of scheduler
-        # scheduler_stdout_filename = self.node.get_option("scheduler_stdout")
-        # with self.retrieved.open(scheduler_stdout_filename, "rb") as handle:
-        #     scheduler_stdout_node = Str(handle)
-        # self.out("scheduler_stdout", scheduler_stdout_node)
-
-        # scheduler_stderr_filename = self.node.get_option("scheduler_stderr")
-        # with self.retrieved.open(scheduler_stderr_filename, "rb") as handle:
-        #     scheduler_stderr_node = Str(handle)
-        # self.out("scheduler_stderr", scheduler_stderr_node)
-
 
         return ExitCode(0)
     
