@@ -33,8 +33,22 @@ class AbacusCalculation(CalcJob):
     _DEFAULT_RETRIEVE_LIST = [
         _OUTPUT_SUBFOLDER
     ]
+    _ABACUS_OUTPUT = "abacus_output"
     _DEFAULT_STDOUT_NAME = "abacus.out"
     _DEFAULT_STDERR_NAME = "abacus.err"
+
+    @classmethod
+    def get_default_calc_paths(cls):
+        '''Return a dictionary with the default path settings for the calculation.'''
+        return {
+            "PSEUDO_SUBFOLDER": cls._PSEUDO_SUBFOLDER,
+            "ORBITAL_SUBFOLDER": cls._ORBITAL_SUBFOLDER,
+            "OUTPUT_SUFFIX": cls._OUTPUT_SUFFIX,
+            "OUTPUT_SUBFOLDER": cls._OUTPUT_SUBFOLDER,
+            "ABACUS_OUTPUT": cls._ABACUS_OUTPUT,
+            "DEFAULT_STDOUT_NAME": cls._DEFAULT_STDOUT_NAME,
+            "DEFAULT_STDERR_NAME": cls._DEFAULT_STDERR_NAME,
+        }
 
     @classmethod
     def define(cls, spec):
@@ -151,7 +165,6 @@ class AbacusCalculation(CalcJob):
 
         # retrieve the output folder OUT.aiida
         calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER, self._DEFAULT_STDOUT_NAME, self._DEFAULT_STDERR_NAME]
-        # print("calcinfo is:", calcinfo)
         print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo

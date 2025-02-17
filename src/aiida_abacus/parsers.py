@@ -42,6 +42,7 @@ class AbacusParser(Parser):
         :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
         """
         output_folder = self.retrieved
+        # print(AbacusCalculation.get_default_calc_paths())
         running_scf_log_filename = Path("OUT.aiida") / "running_scf.log"
         
         # Check that folder content is as expected
