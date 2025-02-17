@@ -49,7 +49,7 @@ class AbacusParser(Parser):
         files_retrieved = self.retrieved.list_object_names()
         print("files_retrieved", files_retrieved)
         # check that 'OUT.aiida' folder is present
-        files_expected = ["OUT.aiida"]
+        files_expected = ["OUT.aiida", "abacus_output"]
         if not set(files_expected) <= set(files_retrieved):
             self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
             return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
@@ -85,16 +85,23 @@ class AbacusParser(Parser):
         misc_node = orm.Dict(dict=out_dict)
         self.out("misc", misc_node)
 
+        # raw abacus_output content str
+        abacus_output_filename = "abacus_output"
+        with self.retrieved.open(abacus_output_filename, "rb") as handle:
+            abacus_output_node = Str(handle)
+        self.out("abacus_output", abacus_output_node)
+        
+        # Scheduler part
         # std output and err stream content of scheduler
-        output_filename = self.node.get_option("scheduler_stdout")
-        with self.retrieved.open(output_filename, "rb") as handle:
-            stdout_node = Str(handle)
-        self.out("scheduler_stdout", stdout_node)
+        # scheduler_stdout_filename = self.node.get_option("scheduler_stdout")
+        # with self.retrieved.open(scheduler_stdout_filename, "rb") as handle:
+        #     scheduler_stdout_node = Str(handle)
+        # self.out("scheduler_stdout", scheduler_stdout_node)
 
-        error_filename = self.node.get_option("scheduler_stderr")
-        with self.retrieved.open(error_filename, "rb") as handle:
-            stderr_node = Str(handle)
-        self.out("scheduler_stderr", stderr_node)
+        # scheduler_stderr_filename = self.node.get_option("scheduler_stderr")
+        # with self.retrieved.open(scheduler_stderr_filename, "rb") as handle:
+        #     scheduler_stderr_node = Str(handle)
+        # self.out("scheduler_stderr", scheduler_stderr_node)
 
 
         return ExitCode(0)

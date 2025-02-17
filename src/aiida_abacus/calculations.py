@@ -9,7 +9,6 @@ from aiida.common import datastructures, exceptions
 from aiida.common.utils import get_unique_filename
 from aiida.engine import CalcJob
 from aiida import orm
-from aiida.orm import SinglefileData, Str
 from aiida.plugins import DataFactory
 
 from aiida_pseudo.data.pseudo.upf import UpfData
@@ -34,8 +33,8 @@ class AbacusCalculation(CalcJob):
         _OUTPUT_SUBFOLDER
     ]
     _ABACUS_OUTPUT = "abacus_output"
-    _DEFAULT_STDOUT_NAME = "abacus.out"
-    _DEFAULT_STDERR_NAME = "abacus.err"
+    # _DEFAULT_SCHEDULER_STDOUT_NAME = "scheduler.stdout"
+    # _DEFAULT_SCHEDULER_STDERR_NAME = "scheduler.stderr"
 
     @classmethod
     def get_default_calc_paths(cls):
@@ -46,8 +45,8 @@ class AbacusCalculation(CalcJob):
             "OUTPUT_SUFFIX": cls._OUTPUT_SUFFIX,
             "OUTPUT_SUBFOLDER": cls._OUTPUT_SUBFOLDER,
             "ABACUS_OUTPUT": cls._ABACUS_OUTPUT,
-            "DEFAULT_STDOUT_NAME": cls._DEFAULT_STDOUT_NAME,
-            "DEFAULT_STDERR_NAME": cls._DEFAULT_STDERR_NAME,
+            # "DEFAULT_STDOUT_NAME": cls._DEFAULT_SCHEDULER_STDOUT_NAME,
+            # "DEFAULT_STDERR_NAME": cls._DEFAULT_SCHEDULER_STDERR_NAME,
         }
 
     @classmethod
@@ -64,8 +63,8 @@ class AbacusCalculation(CalcJob):
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
         # default stdout and stderr of scheduler
         # _scheduler-stdout.txt and _scheduler-stderr.txt redirect to files given
-        spec.inputs["metadata"]["options"]["scheduler_stdout"].default = cls._DEFAULT_STDOUT_NAME # screen stdout
-        spec.inputs["metadata"]["options"]["scheduler_stderr"].default = cls._DEFAULT_STDERR_NAME # screen stderr
+        # spec.inputs["metadata"]["options"]["scheduler_stdout"].default = cls._DEFAULT_SCHEDULER_STDOUT_NAME # screen stdout
+        # spec.inputs["metadata"]["options"]["scheduler_stderr"].default = cls._DEFAULT_SCHEDULER_STDERR_NAME # screen stderr
 
         # default output name, where the output of the calculation will be written
         spec.inputs["metadata"]["options"]["output_filename"].default = cls._ABACUS_OUTPUT
@@ -120,9 +119,12 @@ class AbacusCalculation(CalcJob):
                     help="The scalar outputs or"
                     "small vectors (e.g., energy, forces, stress) of the calculation.")
         
+        # abacus_output, which is a Str
+        spec.output("abacus_output", valid_type=orm.Str, help="The raw ABACUS output file content.")
+        
         # scheduler stdout and stderr port
-        spec.output("scheduler_stdout", valid_type=Str, help="scheduler standard output content")
-        spec.output("scheduler_stderr", valid_type=Str, help="scheduler standard error content")
+        # spec.output("scheduler_stdout", valid_type=orm.Str, help="scheduler standard output content")
+        # spec.output("scheduler_stderr", valid_type=orm.Str, help="scheduler standard error content")
 
         spec.exit_code(
             300,
@@ -168,7 +170,7 @@ class AbacusCalculation(CalcJob):
         calcinfo.local_copy_list = local_copy_list
 
         # retrieve the output folder OUT.aiida
-        calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER, self._DEFAULT_STDOUT_NAME, self._DEFAULT_STDERR_NAME]
+        calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER, self._ABACUS_OUTPUT]
         print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo
