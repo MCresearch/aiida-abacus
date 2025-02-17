@@ -12,6 +12,7 @@ from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
 import re
+from pathlib import Path
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
 
@@ -41,7 +42,7 @@ class AbacusParser(Parser):
         :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
         """
         output_folder = self.retrieved
-        running_scf_log_filename = "OUT.aiida/running_scf.log"
+        running_scf_log_filename = Path("OUT.aiida") / "running_scf.log"
         
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
