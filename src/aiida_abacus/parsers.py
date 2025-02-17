@@ -85,16 +85,16 @@ class AbacusParser(Parser):
         misc_node = orm.Dict(dict=out_dict)
         self.out("misc", misc_node)
 
-        # std output and err
-        output_filename = self.node.get_option("output_filename")
+        # std output and err stream content of scheduler
+        output_filename = self.node.get_option("scheduler_stdout")
         with self.retrieved.open(output_filename, "rb") as handle:
             stdout_node = Str(handle)
-        self.out("stdout", stdout_node)
+        self.out("scheduler_stdout", stdout_node)
 
         error_filename = self.node.get_option("scheduler_stderr")
         with self.retrieved.open(error_filename, "rb") as handle:
             stderr_node = Str(handle)
-        self.out("stderr", stderr_node)
+        self.out("scheduler_stderr", stderr_node)
 
 
         return ExitCode(0)

@@ -62,10 +62,13 @@ class AbacusCalculation(CalcJob):
         }
         # entry point for parser
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
-        # default screen stdout and stderr
-        # _scheduler-stdout.txt and _scheduler-stderr.txt
-        spec.inputs["metadata"]["options"]["output_filename"].default = cls._DEFAULT_STDOUT_NAME # screen stdout
+        # default stdout and stderr of scheduler
+        # _scheduler-stdout.txt and _scheduler-stderr.txt redirect to files given
+        spec.inputs["metadata"]["options"]["scheduler_stdout"].default = cls._DEFAULT_STDOUT_NAME # screen stdout
         spec.inputs["metadata"]["options"]["scheduler_stderr"].default = cls._DEFAULT_STDERR_NAME # screen stderr
+
+        # default output name, where the output of the calculation will be written
+        spec.inputs["metadata"]["options"]["output_filename"].default = cls._ABACUS_OUTPUT
 
 
         spec.input('metadata.options.withmpi', valid_type=bool, default=True) # use mpi by default
@@ -117,8 +120,9 @@ class AbacusCalculation(CalcJob):
                     help="The scalar outputs or"
                     "small vectors (e.g., energy, forces, stress) of the calculation.")
         
-        spec.output("stdout", valid_type=Str, help="standard output content")
-        spec.output("stderr", valid_type=Str, help="standard error content")
+        # scheduler stdout and stderr port
+        spec.output("scheduler_stdout", valid_type=Str, help="scheduler standard output content")
+        spec.output("scheduler_stderr", valid_type=Str, help="scheduler standard error content")
 
         spec.exit_code(
             300,
@@ -154,7 +158,7 @@ class AbacusCalculation(CalcJob):
         codeinfo.code_uuid = self.inputs.code.uuid
         # The stdout_name attribute tells the engine where the output of the executable should be redirected to.
         # Here set to the value of the output_filename option.
-        codeinfo.stdout_name = self.metadata.options.output_filename
+        codeinfo.stdout_name = self._ABACUS_OUTPUT
 
         # Prepare a `CalcInfo` to be returned to the engine
         calcinfo = datastructures.CalcInfo()
