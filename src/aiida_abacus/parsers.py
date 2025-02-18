@@ -67,13 +67,13 @@ class AbacusParser(Parser):
 
 
         # patter to search for total energy in output file
-        # look for " !FINAL_ETOT_IS xxx eV"
+        # look for final total energy" !FINAL_ETOT_IS xxx eV"
         pattern = r"!FINAL_ETOT_IS\s+(-?\d+\.\d+)\s+eV"
         # search for pattern in output file
         self.logger.info(f"Searching for pattern '{pattern}'")
         self.logger.info(f"Contents of file: {output}")
 
-        final_energy_total = self._parse_energy(output, pattern)
+        final_energy_total = self._parse_re_pattern(output, pattern)
 
         # parse miscellaneaous "misc"
         # valid_type=orm.Dict
@@ -92,18 +92,18 @@ class AbacusParser(Parser):
 
         return ExitCode(0)
     
-    def _parse_energy(self, output, pattern):
+    def _parse_re_pattern(self, output, pattern):
         """
-        Parse energy from output file.
+        Parse pattern from output file.
 
         :param output: output file content
         :param pattern: regular expression pattern to search for
-        :returns: energy value
+        :returns: extracted value
         """
         pattern_compile = re.compile(pattern)
         res = pattern_compile.search(output)
         if res:
-            energy = float(res.group(1))
+            value = float(res.group(1))
         else:
-            energy = None
-        return energy
+            value = None
+        return value
