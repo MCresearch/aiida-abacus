@@ -48,21 +48,25 @@ class AbacusParser(Parser):
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
         print("files_retrieved", files_retrieved)
-        # check that 'OUT.aiida' folder is present
-        files_expected = [calc_paths["OUTPUT_SUBFOLDER"], calc_paths["ABACUS_OUTPUT"]]
+        
+        # Note: set(A) <= set(B) checks whether A is a subset of B
+        # check that the following results are present
+        # OUTPUT_SUBFOLDER - 'OUT.aiida' folder: contains the output files of ABACUS calculation
+        #       'OUT.aiida/running_scf.log': contains the output of the calculation
+        # ABACUS_OUTPUT - redirected stdout of the calculation, abacus_output
+        files_expected = [
+            calc_paths["OUTPUT_SUBFOLDER"], # 'OUT.aiida' folder
+            calc_paths["ABACUS_OUTPUT"] # abacus_output file
+            ]
         if not set(files_expected) <= set(files_retrieved):
             self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
             return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
-        # files_expected = [output_filename]
-        # Note: set(A) <= set(B) checks whether A is a subset of B
-        # if not set(files_expected) <= set(files_retrieved):
-        #     self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
-        #     return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
+        
 
         # add output file
         with output_folder.open(running_scf_log_filename, "r") as handle:
             output = handle.read()
-        # print("output", output)
+
         self.logger.info(f"Parsing '{running_scf_log_filename}'")
 
 
@@ -79,7 +83,7 @@ class AbacusParser(Parser):
         # valid_type=orm.Dict
 
         out_dict = {"final_energy_total": final_energy_total}
-        print("out_dict", out_dict)
+        print("output misc dict:", out_dict)
         misc_node = orm.Dict(dict=out_dict)
         self.out("misc", misc_node)
 
