@@ -430,7 +430,7 @@ class AbacusCalculation(CalcJob):
                 atom_position_dict[kind_name] = {
                     "number_of_atoms": 1,
 # need to add magnetism into readin parameters
-                    "initial_magnetic_moment": 1.0,
+                    "initial_magnetic_moment": 0.0,
                     "positions": []
                 }
             else:
