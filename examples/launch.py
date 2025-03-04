@@ -62,21 +62,48 @@ precision       double
 ###     So it is strongly recommended to test whether your result (such as converged SCF energies) is
 ###     converged with respect to the energy cutoff.
 """
+
+'''
+#Parameters (1.General)
+suffix                  Si
+calculation             scf
+symmetry                1
+pseudo_dir              .
+orbital_dir             .
+basis_type              pw
+ecutwfc                 100
+
+#Parameters (2. SCF iterations)
+scf_nmax                100
+scf_thr                 1e-8
+
+#Parameters (3. Solve KS equation)
+nbands                  26
+ks_solver               cg
+
+#Parameters (4.Smearing)
+smearing_method         gauss
+smearing_sigma          0.01
+
+#Parameters (5.Mixing)
+mixing_type             broyden
+mixing_beta             0.7
+mixing_gg0              0
+'''
+# input_parameters = {
+#     'calculation': 'scf',
+# }
 input_parameters = {
     # pseudo_dir will be set by the plugin based on the pseudos
     # 'symmetry': 1,
-    # 'basis_type': 'pw',
+    'basis_type': 'pw',
     'ecutwfc': 100,
     'scf_thr': 1e-4, #1e-7,
     # 'scf_nmax': 100,
-    # 'device': 'cpu',
+    'device': 'cpu',
     # 'ks_solver': 'dav_subspace',
     # 'precision': 'double',
-    # STRU
-    # 'lattice_constant': 10.2,
 }
-
-parameters=Dict(dict=input_parameters)
 
 
 ###
@@ -142,6 +169,18 @@ lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
 from ase.build import bulk
 structure = StructureData(ase=bulk('Si', 'fcc', 5.43))
 
+# structure parameters
+stru_settings ={
+    "LATTICE_CONSTANT": 1.8897261258369282,
+    # KEYWORD m : whether or not allowed to move in geometry relaxation calculations.
+    # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations. 
+    "m": [[True, True, True]],
+    # KEYWORD mag or magmom : set the start magnetization for each atom.
+    # In colinear case only one number should be given.
+    # In non-colinear case set three number for the xyz commponent of magnetization here (e. g. mag 0.0 0.0 1.0).
+    # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
+    "mag": [[0.0, 0.0, 0.0]],
+}
 
 # KPT
 # KpointsData = DataFactory('core.array.kpoints')
@@ -159,11 +198,18 @@ pseudo_family = load_group('SSSP/1.1/PBE/efficiency')
 builder.pseudos = pseudo_family.get_pseudos(structure=structure)
 
 
+
+all_parameters = {
+    "input": input_parameters,
+    "stru": stru_settings,
+}
+
 builder.structure = structure
 builder.kpoints = kpoints
+builder.settings = stru_settings
 builder.metadata.description = 'Test job submission with the aiida_abacus plugin'
 
-
+parameters = Dict(dict=all_parameters)
 # Run the calculation & print results
 results, node = engine.run.get_node(builder, parameters=parameters)
 misc = results['misc'].get_dict()

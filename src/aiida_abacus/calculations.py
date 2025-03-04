@@ -71,8 +71,11 @@ class AbacusCalculation(CalcJob):
         # see https://abacus.deepmodeling.com/en/latest/quick_start/input.html for detail
 
         # parameters, which is a Dict
-        # will be written into INPUT file after validation
-        spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters INPUT.")
+        # consists of different parts
+        # "input" dict will be written into INPUT file after validation
+        # "stru" dict will be queried to write STRU file
+        # thus, parameters is likely some Dict() of {"input": {}, "stru": {}}
+        spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters.")
 
         # kpoints, which is a KpointsData
         # will be written into KPT file after validation
@@ -88,6 +91,7 @@ class AbacusCalculation(CalcJob):
         # Several other parameters could be defined after the atom position using key words.
         # See https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html#more-key-words
         # for details.
+        spec.input("settings", valid_type=orm.Dict, help="Optional parameters in STRU.")
         # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
         # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
@@ -190,13 +194,13 @@ class AbacusCalculation(CalcJob):
         # prepare input content
         parameters = self.inputs.parameters.get_dict()
         # output folder will be OUT.aiida
-        parameters["suffix"] = self._OUTPUT_SUFFIX
+        parameters["input"]["suffix"] = self._OUTPUT_SUFFIX
         # parameters.suffix = "aiida"
         # folder for pseudopotentials, default is ./pseudo/
-        parameters["pseudo_dir"] = self._PSEUDO_SUBFOLDER
+        parameters["input"]["pseudo_dir"] = self._PSEUDO_SUBFOLDER
         # parameters.pseudo_dir = self._PSEUDO_SUBFOLDER
 
-        input_content = self.generate_input(parameters)
+        input_content = self.generate_input(parameters["input"])
         with open(input_file, "w") as handle:
             handle.write(input_content)
     
@@ -232,12 +236,13 @@ class AbacusCalculation(CalcJob):
         with open(kpt_file, "w") as handle:
             handle.write("\n".join(kpt_list))
 
-    def generate_structure(self, structure, pseudos) -> str:
+    def generate_structure(self, structure, pseudos, parameters) -> str:
         """Generate the content of input file STRU according to structure.
         For detailed documentation,
         see the `ABACUS Input Guide <https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html>`_.
         :param structure: a StructureData object
         :param pseudos: a dictionary of pseudopotential nodes
+        :param parameters: a dictionary of stru parameters
         :return: the content of the input file STRU & a list of pseudopotential files to be copied"""
         # may add some validation here, and maybe some conversions
 
@@ -305,6 +310,7 @@ class AbacusCalculation(CalcJob):
 
         # LATTICE_CONSTANT section
         # The lattice constant of the system in unit of Bohr.
+        print("parameter is:", parameters)
         lattice_constant = ["\nLATTICE_CONSTANT"]
         # print("structure.cell is:", structure.cell)
 # need to be rechecked!
@@ -326,7 +332,10 @@ class AbacusCalculation(CalcJob):
         # from ase/io/onetep.py
         # 1.889726134583548707935
         lattice_const_in_bohr = 1.8897259886 		# 1.8897259886 Bohr =  1.0 Angstrom
-        lattice_constant.append(str(lattice_const_in_bohr))
+        if "LATTICE_CONSTANT" in parameters:
+            lattice_constant.append(str(parameters["LATTICE_CONSTANT"]))
+        else:
+            lattice_constant.append(str(lattice_const_in_bohr))
         structure_list.extend(lattice_constant)
 
         # LATTICE_VECTORS section
@@ -361,21 +370,33 @@ class AbacusCalculation(CalcJob):
         atom_position_dict = {}
         # each key-value pair: key is the kind name, value is a list of atom positions and other parameters
 # this should be given as inputs!
-        # keyword m: the atom is allowed to move in geometry relaxation calculations
-        move_list = [0, 0, 0] # default value for move_x, move_y, move_z
+        
         coordinates = [site.position for site in structure.sites]
+
+        # KEYWORD m: the atom is allowed to move in geometry relaxation calculations
+        # like [[True, True, True]]
+        move_list = parameters["m"] # default value for move_x, move_y, move_z
+        # KEYWORD mag: set the start magnetization for each atom
+        # set three number for the xyz commponent of magnetization here (e.g. mag 0.0 0.0 1.0).
+        magmom_list = parameters["mag"] # default value for mag_x, mag_y, mag_z
 
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
         # the initial magnetic moment (1.0),
         # and the number of atoms for this particular element (2) repsectively.
-        for site, site_coords in zip(structure.sites, coordinates):
+        for site, site_coords, moves in zip(structure.sites, coordinates, move_list):
             kind_name = site.kind_name
+            move_int = [int(i) for i in moves]
             position = [
                 *site_coords,
                 'm', # m or NO key word: three numbers, which take value in 0 or 1,
                      # control how the atom move in geometry relaxation calculations. 
-                *move_list,
+                *move_int,
+                'mag', # mag or magmom: set the start magnetization for each atom.
+                *magmom_list, # In colinear case only one number should be given.
+                              # In non-colinear case set three number for the xyz commponent of magnetization here
+                              # (e. g. mag 0.0 0.0 1.0).
+                              # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
                 # Other key word parameters can be added here.
             ]
             if kind_name not in atom_position_dict:
@@ -412,7 +433,8 @@ class AbacusCalculation(CalcJob):
         Write the structure file STRU.
         :return: a list of pseudopotential files to be copied
         """
-        structure_content, local_pseudo_copy_list = self.generate_structure(self.inputs.structure, self.inputs.pseudos)
+        structure_content, local_pseudo_copy_list = self.generate_structure(
+            self.inputs.structure, self.inputs.pseudos, self.inputs.parameters["stru"])
         with open(stru_file, "w") as handle:
             handle.write(structure_content)
         return local_pseudo_copy_list
