@@ -373,32 +373,59 @@ class AbacusCalculation(CalcJob):
         
         coordinates = [site.position for site in structure.sites]
 
+        ### BELOW are mandatory keywords!!!###
+        # that is even though no 'm' KEYWORD is given, this set of params still need to be given
         # KEYWORD m: the atom is allowed to move in geometry relaxation calculations
         # like [[True, True, True]]
         move_list = parameters["m"] # default value for move_x, move_y, move_z
-        # KEYWORD mag: set the start magnetization for each atom
+
+        ### BELOW are optional keywords!!!###
+        # KEYWORD mag or magmom: set the start magnetization for each atom
         # set three number for the xyz commponent of magnetization here (e.g. mag 0.0 0.0 1.0).
-        magmom_list = parameters["mag"] # default value for mag_x, mag_y, mag_z
+
+        magmom_list = parameters.get("mag") or parameters.get("magmom", []) # default value for mag_x, mag_y, mag_z
+
+        # Ensure the length of the magnetic moment list is consistent with the number of atoms
+        # (fill in empty lists if insufficient)
+        if magmom_list:
+            if len(magmom_list) != len(structure.sites):
+                #  fill in the default value if the length of the magnetic moment list is insufficient
+                magmom_list += [[] for _ in range(len(structure.sites) - len(magmom_list))]
+        else: # empty list
+            magmom_list = [[] for _ in range(len(structure.sites))]
 
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
         # the initial magnetic moment (1.0),
         # and the number of atoms for this particular element (2) repsectively.
-        for site, site_coords, moves in zip(structure.sites, coordinates, move_list):
+        for site, site_coords, moves, magmoms in zip(structure.sites, coordinates, move_list, magmom_list):
             kind_name = site.kind_name
             move_int = [int(i) for i in moves]
+
+            # process magnetic moment (if exists)
+            magmom_float = []
+            if magmoms:  # if magmom is not empty
+                magmom_float = [float(i) for i in magmoms]  # 转换为浮点数
+
+            
+            # each position is a line containing the following information:
             position = [
                 *site_coords,
-                'm', # m or NO key word: three numbers, which take value in 0 or 1,
+                "m", # m or NO key word: three numbers, which take value in 0 or 1,
                      # control how the atom move in geometry relaxation calculations. 
                 *move_int,
-                'mag', # mag or magmom: set the start magnetization for each atom.
-                *magmom_list, # In colinear case only one number should be given.
-                              # In non-colinear case set three number for the xyz commponent of magnetization here
-                              # (e. g. mag 0.0 0.0 1.0).
-                              # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
-                # Other key word parameters can be added here.
             ]
+            # if magmom_float is not empty, add magnetic moment information
+            if magmom_float:
+                position.extend(["magmom", # mag or magmom: set the start magnetization for each atom.
+                                *magmom_float])  # In colinear case only one number should be given.
+                                              # In non-colinear case set three number for the xyz commponent of magnetization here
+                                              # (e. g. mag 0.0 0.0 1.0).
+                                              # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
+            
+            # Other STRU key word parameters parser can be added here.
+
+
             if kind_name not in atom_position_dict:
                 atom_position_dict[kind_name] = {
                     "number_of_atoms": 1,
