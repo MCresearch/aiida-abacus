@@ -303,6 +303,8 @@ class AbacusCalculation(CalcJob):
         # NUMERICAL_ORBITAL section
         # Numerical atomic orbitals are only needed for LCAO calculations.
         # This section will be neglected in calcultions with plane wave basis(PW).
+        # numerical_orbital = ["\nNUMERICAL_ORBITAL"]
+        # structure_list.extend(numerical_orbital)
         # structure_list.append("\nNUMERICAL_ORBITAL\n")
         # for orbital in structure["numerical_orbital"]:
         #     structure_list.append(orbital)

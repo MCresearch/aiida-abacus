@@ -157,11 +157,8 @@ Si 			#Name of element
 
 
 # STRU
-# adadpted from aiida-vasp
 # StructureData = DataFactory('core.structure')
-# /miniconda3/envs/aiida/lib/python3.12/site-packages/aiida/plugins/entry_point.py:350:
-# AiidaDeprecationWarning: The entry point `structure` is deprecated.
-# Please replace it with `core.structure`. (this will be removed in v3)
+
 a = 3.092
 c = 5.073
 lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
@@ -174,12 +171,16 @@ stru_settings ={
     "LATTICE_CONSTANT": 1.8897261258369282,
     # KEYWORD m : whether or not allowed to move in geometry relaxation calculations.
     # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations. 
-    "m": [[True, True, True]],
+    "m": [
+        [True, True, True]
+    ],
     # KEYWORD mag or magmom : set the start magnetization for each atom.
     # In colinear case only one number should be given.
     # In non-colinear case set three number for the xyz commponent of magnetization here (e. g. mag 0.0 0.0 1.0).
     # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
-    "mag": [[0.0, 0.0, 0.0]],
+    "mag": [
+        [0.0, 0.0, 0.0]
+    ],
 }
 
 # KPT

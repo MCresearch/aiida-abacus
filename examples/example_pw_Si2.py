@@ -1,5 +1,6 @@
 """Launch a calculation using the 'aiida-abacus' plugin"""
 # We will use the abacus-develop/examples/scf/pw_Si2 directory as an example
+# different pseudos are referenced here!
 
 from pathlib import Path
 
@@ -55,15 +56,12 @@ precision       double
 """
 
 
-# input_parameters = {
-#     'calculation': 'scf',
-# }
 input_parameters = {
     # pseudo_dir will be set by the plugin based on the pseudos
     'symmetry': 1,
     'basis_type': 'pw',
-    'ecutwfc': 60, #100,
-    'scf_thr': 1e-7, #1e-4, #1e-7,
+    'ecutwfc': 60,
+    'scf_thr': 1e-7,
     'scf_nmax': 100,
     'device': 'cpu',
     'ks_solver': 'dav_subspace',
@@ -78,7 +76,7 @@ input_parameters = {
 #about the lattice structure.
 
 ATOMIC_SPECIES
-Si 1.000 Si.pz-vbc.UPF 	#Element, Mass, Pseudopotential
+Si 28.0855 Si.pbe-n-rrkjus_psl.1.0.0.UPF 	#Element, Mass, Pseudopotential
 
 LATTICE_CONSTANT
 10.2  			#Lattice constant
@@ -122,14 +120,12 @@ Si 			#Name of element
 
 
 # STRU
-# StructureData = DataFactory('core.structure')
 
 a = 3.092
 c = 5.073
 lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
-lattice_constant = 10.2  # 单位：Å
+lattice_constant = 10.2  # Å
 
-# 原始分数形式的晶格向量（需乘以晶格常数）
 lattice_vectors_fractional = np.array([
     [0.0, 0.5, 0.5],
     [0.5, 0.0, 0.5],
@@ -143,8 +139,7 @@ atomic_positions_fractional = [
 structure = StructureData(cell=lattice_vectors_fractional)
 for pos in atomic_positions_fractional:
     structure.append_atom(position=pos, symbols="Si")
-print("structure:", structure)
-# structure = StructureData(cell=lattice)
+
 # from ase.build import bulk
 # structure = StructureData(ase=bulk('Si', 'fcc', 5.43))
 
