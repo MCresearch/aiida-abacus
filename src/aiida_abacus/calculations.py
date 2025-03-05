@@ -125,6 +125,8 @@ class AbacusCalculation(CalcJob):
             "ERROR_MISSING_OUTPUT_FILES",
             message="Calculation did not produce all expected output files.",
         )
+        # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
+        spec.default_output_node = 'misc'
 
     def prepare_for_submission(self, folder):
         """
