@@ -43,7 +43,6 @@ class AbacusParser(Parser):
         """
         output_folder = self.retrieved
         calc_paths = AbacusCalculation.get_default_calc_paths()
-        running_scf_log_filename = Path(calc_paths["OUTPUT_SUBFOLDER"]) / "running_scf.log"
         
         # Check that folder content is as expected
         files_retrieved = self.retrieved.list_object_names()
@@ -64,6 +63,7 @@ class AbacusParser(Parser):
         
 
         # add output file
+        running_scf_log_filename = Path(calc_paths["OUTPUT_SUBFOLDER"]) / "running_scf.log"
         with output_folder.open(running_scf_log_filename, "r") as handle:
             output = handle.read()
 
@@ -87,13 +87,6 @@ class AbacusParser(Parser):
         misc_node = orm.Dict(dict=out_dict)
         self.out("misc", misc_node)
 
-        # raw abacus_output content str
-        abacus_output_filename = calc_paths["ABACUS_OUTPUT"]
-        with self.retrieved.open(abacus_output_filename, "rb") as handle:
-            abacus_output_node = Str(handle)
-        self.out("abacus_output", abacus_output_node)
-        
-
         return ExitCode(0)
     
     def _parse_re_pattern(self, output, pattern):
@@ -111,3 +104,76 @@ class AbacusParser(Parser):
         else:
             value = None
         return value
+
+
+class AbacusRawParser:
+    """
+    A parser to process abacus output files (running_xxx.log)
+    """
+
+
+    def __init__(self, fhandle):
+        """A parser for the ABACUS output file."""
+        self.content = fhandle.read()
+        self.results = {}
+        self.is_parsed = False
+
+    def parse_blocks(self) -> None:
+        """
+        Parse blocks from output file.
+        """
+        # Re pattern to match the block name, unit and content.
+        pattern =  re.compile(r'---------+\n TOTAL-(FORCE|STRESS) \(([a-zA-Z/]+)\) *\n------+\n(.*?)\n--------+',
+                               flags=re.DOTALL)
+        # First, process all blocks
+        all_blocks = []
+        for match in re.findall(pattern, self.content):
+            block_type = match[0]
+            block_unit = match[1]
+            block_content = match[2]
+            lines = [line.strip() for line in block_content.split('\n')]
+            all_blocks.append((block_type, block_unit, lines))
+
+        all_forces = []
+        all_pressure = []
+        # Process the blocks one by one, additional block type can be supported by adding more elifs.
+        for block_type, block_unit, lines in all_blocks:
+            if block_type == 'FORCE':
+                forces = []
+                for line in lines:
+                    tokens = line.split()
+                    forces.append([float(token) for token in tokens[1:]])
+                    all_forces.append(forces)
+                self.results['force_unit'] = block_unit
+
+            if block_type == 'STRESS':
+                stress = []
+                for line in lines:
+                    stress.append([float(token) for token in line.split()])
+                    all_pressure.append(stress)
+                self.results['stress_unit'] = block_unit
+        self.results['all_forces'] = all_forces
+        self.results['all_pressure'] = all_pressure
+        self.results['final_forces'] = all_forces[-1] if all_forces else None
+        self.results['final_pressure'] = all_pressure[-1] if all_pressure else None
+
+    def parse(self) -> dict:
+        """
+        Parse ABACUS output file.
+
+        :returns: parsed results as a dictionary
+        """
+        self.parse_blocks()
+        # Parse the lines one-by-one for general information of the calculation
+        for line in self.content.split('\n'):
+            if 'TOTAL-PRESSURE' in line:
+                self.results['pressure'] = line.strip().split()[1]
+                self.results['pressure_unit'] = line.strip().split()[2]
+                if 'all_pressure' not in self.results:
+                    self.results['all_pressure'] = []
+                self.results['all_pressure'].append(self.results['pressure'])
+            if '!FINAL_ETOT_IS' in line:
+                self.results['total_energy'] = line.strip().split()[1]
+
+        self.is_parsed = True
+        return self.results
