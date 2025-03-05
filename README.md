@@ -31,12 +31,12 @@ pip install .
 We use the [`aiida-pseudo` plugin](https://pypi.org/project/aiida-pseudo/) to install and manage pseudopotentials.
 It is easy to install pseudopotentials by aiida-pseudo CLI:
 ```bash
-aiida-pseudo install sssp
+aiida-pseudo install pseudo-dojo -f upf -v 0.4 -x PBE -r SR -p standard 
 ```
 and load the pseudopotential family installed by calling
 `load_group` in the launch script.
 ```py
-pseudo_family = load_group('SSSP/1.1/PBE/efficiency')
+pseudo_family = load_group('PseudoDojo/0.4/PBE/SR/standard/upf')
 ```
 
 ## Documentation
