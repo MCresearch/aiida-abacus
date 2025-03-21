@@ -15,7 +15,7 @@ from aiida_pseudo.data.pseudo.upf import UpfData
 
 from .common import make_retrieve_list
 
-LegacyUpfData = DataFactory('core.upf')
+LegacyUpfData = DataFactory("core.upf")
 
 
 class AbacusCalculation(CalcJob):
@@ -25,19 +25,16 @@ class AbacusCalculation(CalcJob):
     """
 
     # Here we define some default paths for the input and output files of the calculation
-    _PSEUDO_SUBFOLDER = "./pseudo/" # default pesudopotential folder
-    _ORBITAL_SUBFOLDER = "./orbital/" # default orbital folder
-    _OUTPUT_SUFFIX = "aiida" # default output suffix
-    _OUTPUT_SUBFOLDER = "OUT." + _OUTPUT_SUFFIX # default output folder
-    _DEFAULT_RETRIEVE_LIST = [
-        _OUTPUT_SUBFOLDER
-    ]
+    _PSEUDO_SUBFOLDER = "./pseudo/"  # default pesudopotential folder
+    _ORBITAL_SUBFOLDER = "./orbital/"  # default orbital folder
+    _OUTPUT_SUFFIX = "aiida"  # default output suffix
+    _OUTPUT_SUBFOLDER = "OUT." + _OUTPUT_SUFFIX  # default output folder
+    _DEFAULT_RETRIEVE_LIST = [_OUTPUT_SUBFOLDER]
     _ABACUS_OUTPUT = "abacus_output"
-
 
     @classmethod
     def get_default_calc_paths(cls):
-        '''Return a dictionary with the default path settings for the calculation.'''
+        """Return a dictionary with the default path settings for the calculation."""
         return {
             "PSEUDO_SUBFOLDER": cls._PSEUDO_SUBFOLDER,
             "ORBITAL_SUBFOLDER": cls._ORBITAL_SUBFOLDER,
@@ -54,7 +51,7 @@ class AbacusCalculation(CalcJob):
         # set default values for AiiDA options
         spec.inputs["metadata"]["options"]["resources"].default = {
             "num_machines": 1,
-            "num_mpiprocs_per_machine": 1, # use 1 cores per machine by default
+            "num_mpiprocs_per_machine": 1,  # use 1 cores per machine by default
         }
         # entry point for parser
         spec.inputs["metadata"]["options"]["parser_name"].default = "abacus.abacus"
@@ -62,8 +59,7 @@ class AbacusCalculation(CalcJob):
         # default output name, where the output of the calculation will be written
         spec.inputs["metadata"]["options"]["output_filename"].default = cls._ABACUS_OUTPUT
 
-
-        spec.input('metadata.options.withmpi', valid_type=bool, default=True) # use mpi by default
+        spec.input("metadata.options.withmpi", valid_type=bool, default=True)  # use mpi by default
 
         # new ports
 
@@ -91,13 +87,15 @@ class AbacusCalculation(CalcJob):
         # Several other parameters could be defined after the atom position using key words.
         # See https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html#more-key-words
         # for details.
-        spec.input("settings", valid_type=orm.Dict,
-                   help="""Additional control parameters for how AiiDA behaves for this calculation.
+        spec.input(
+            "settings",
+            valid_type=orm.Dict,
+            help="""Additional control parameters for how AiiDA behaves for this calculation.
                    Available options includes: additional_retrieve_list, excluded_retrieve_list,
                    retrieve_charge_density, include_kpoints, include_internal_parameters
                    """,
-                   required=False
-                   )
+            required=False,
+        )
         # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
         # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
@@ -118,13 +116,14 @@ class AbacusCalculation(CalcJob):
         # the scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.
         # extracted from the output file OUT.aiida/running_scf.log
         # results will be stored in a Dict node.
-        spec.output("misc", valid_type=orm.Dict,
-                    help="The scalar outputs or"
-                    "small vectors (e.g., energy, forces, stress) of the calculation.")
+        spec.output(
+            "misc",
+            valid_type=orm.Dict,
+            help="The scalar outputs or" "small vectors (e.g., energy, forces, stress) of the calculation.",
+        )
 
         # abacus_output, which is a Str
         spec.output("abacus_output", valid_type=orm.Str, help="The raw ABACUS output file content.")
-
 
         spec.exit_code(
             300,
@@ -132,7 +131,7 @@ class AbacusCalculation(CalcJob):
             message="Calculation did not produce all expected output files.",
         )
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
-        spec.default_output_node = 'misc'
+        spec.default_output_node = "misc"
 
     def prepare_for_submission(self, folder):
         """
@@ -144,18 +143,17 @@ class AbacusCalculation(CalcJob):
         """
         local_copy_list = []
 
-        INPUT = folder.get_abs_path("INPUT")
-        KPT = folder.get_abs_path("KPT")
-        STRU = folder.get_abs_path("STRU")
+        input_file = folder.get_abs_path("INPUT")
+        kpt_file = folder.get_abs_path("KPT")
+        stru_file = folder.get_abs_path("STRU")
 
-        self.write_input(INPUT)
-        self.write_kpoints(KPT)
+        self.write_input(input_file)
+        self.write_kpoints(kpt_file)
 
-        local_pseudo_copy_list = self.write_stru(STRU)
+        local_pseudo_copy_list = self.write_stru(stru_file)
         local_copy_list.extend(local_pseudo_copy_list)
 
         codeinfo = datastructures.CodeInfo()
-
 
         # To run ABACUS, no cmdline params needed
         codeinfo.cmdline_params = []
@@ -171,11 +169,11 @@ class AbacusCalculation(CalcJob):
 
         # retrieve the output folder OUT.aiida
         # Gather the list of the files to be retrieved/included
-        settings = {} if 'settings' in self.inputs else self.inputs.settings
-        calcinfo.retrieve_list = [self._ABACUS_OUTPUT, *make_retrieve_list(self.inputs.parameters,
-                                                                           settings,
-                                                                           self._OUTPUT_SUFFIX
-                                                                           )]
+        settings = {} if "settings" in self.inputs else self.inputs.settings
+        calcinfo.retrieve_list = [
+            self._ABACUS_OUTPUT,
+            *make_retrieve_list(self.inputs.parameters, settings, self._OUTPUT_SUFFIX),
+        ]
 
         print("to be retrieved:", calcinfo.retrieve_list)
 
@@ -190,7 +188,7 @@ class AbacusCalculation(CalcJob):
         :return: the content of the input file INPUT"""
         # may add some validation here, and maybe some conversions
         input_list = [
-            "INPUT_PARAMETERS" # parameter list always starts with key word INPUT_PARAMETERS
+            "INPUT_PARAMETERS"  # parameter list always starts with key word INPUT_PARAMETERS
         ]
 
         for key, value in parameters.items():
@@ -218,13 +216,14 @@ class AbacusCalculation(CalcJob):
 
     def write_kpoints(self, kpt_file):
         """Write the kpoints file KPT."""
-        kpt_list = ["K_POINTS", # kewyword for start
-                    "0", # total number of k-point, `0' means generate automatically
-                    "Gamma", # which kind of Monkhorst-Pack method, `Gamma' or `MP'
-                    # here we need six numbers,
-                    # first three number: subdivisions along reciprocal vectors
-                    # last three number: shift of the mesh
-                    ]
+        kpt_list = [
+            "K_POINTS",  # kewyword for start
+            "0",  # total number of k-point, `0' means generate automatically
+            "Gamma",  # which kind of Monkhorst-Pack method, `Gamma' or `MP'
+            # here we need six numbers,
+            # first three number: subdivisions along reciprocal vectors
+            # last three number: shift of the mesh
+        ]
 
         # validation adapted from aiida-quantumespresso\src\aiida_quantumespresso\calculations\__init__.py
         try:
@@ -232,13 +231,9 @@ class AbacusCalculation(CalcJob):
             # Offset of the mesh: List[float]
             mesh, offset = self.inputs.kpoints.get_kpoints_mesh()
         except AttributeError as exceptions:
-            raise exceptions.InputValidationError(
-                "No mesh found in KpoitnsData."
-            )
+            raise exceptions.InputValidationError("No mesh found in KpoitnsData.")
         if any([i not in [0, 0.5] for i in offset]):
-            raise exceptions.InputValidationError(
-                "offset list must only be made of 0 or 0.5 floats"
-            )
+            raise exceptions.InputValidationError("offset list must only be made of 0 or 0.5 floats")
 
         # Convert offset to integers (0 or 1)
         the_offset = [0 if i == 0.0 else 1 for i in offset]
@@ -278,15 +273,15 @@ class AbacusCalculation(CalcJob):
         kind_names = []
         # append the pseudopotential files to the list of files to be copied
         for kind in structure.kinds:
-
             # This should not give errors, I already checked before that
             # the list of keys of pseudos and kinds coincides
-# need validation here
+            # need validation here
             # structure_kinds = set(value['structure'].get_kind_names())
             # pseudo_kinds = set(value['pseudos'].keys())
 
             # if structure_kinds != pseudo_kinds:
-            #     return f'The `pseudos` specified and structure kinds do not match: {pseudo_kinds} vs {structure_kinds}'
+            #     return f'The `pseudos` specified and structure kinds do not match: {pseudo_kinds} vs
+            # {structure_kinds}'
 
             pseudo = pseudos[kind.name]
             if kind.is_alloy or kind.has_vacancies:
@@ -306,11 +301,9 @@ class AbacusCalculation(CalcJob):
                 )
 
             kind_names.append(kind.name)
-            atomic_species.append(f'{kind.name.ljust(6)} {kind.mass:^8}  {filename}')
+            atomic_species.append(f"{kind.name.ljust(6)} {kind.mass:^8}  {filename}")
 
         structure_list.extend(atomic_species)
-
-
 
         # NUMERICAL_ORBITAL section
         # Numerical atomic orbitals are only needed for LCAO calculations.
@@ -321,19 +314,17 @@ class AbacusCalculation(CalcJob):
         # for orbital in structure["numerical_orbital"]:
         #     structure_list.append(orbital)
 
-
         # LATTICE_CONSTANT section
         # The lattice constant of the system in unit of Bohr.
         print("parameter is:", parameters)
         lattice_constant = ["\nLATTICE_CONSTANT"]
         # print("structure.cell is:", structure.cell)
-# need to be rechecked!
+        # need to be rechecked!
         # LATTICE_CONSTANT represents a length for the overall scaling of the lattice.
         # Note that 1 Angstrom = 1.8897261258369282 bohr,
         # and writing a decimal starting with 1.8 here means that
         # the following LATTICE_VECTORS section can be written in lattice units of Angstrom.
 
-        ang_to_bohr = 1.8897161646320724  # 1 Å ≈ 1.8897 Bohr
         # lengths_in_ang = [np.linalg.norm(v) for v in structure.cell]
         # lengths_in_bohr = [ang_to_bohr * length for length in lengths_in_ang]
         # lattice_const_in_ang = max(lengths_in_ang)
@@ -345,7 +336,7 @@ class AbacusCalculation(CalcJob):
 
         # from ase/io/onetep.py
         # 1.889726134583548707935
-        lattice_const_in_bohr = 1.8897259886 		# 1.8897259886 Bohr =  1.0 Angstrom
+        lattice_const_in_bohr = 1.8897259886  # 1.8897259886 Bohr =  1.0 Angstrom
         if "LATTICE_CONSTANT" in parameters:
             lattice_constant.append(str(parameters["LATTICE_CONSTANT"]))
         else:
@@ -363,7 +354,7 @@ class AbacusCalculation(CalcJob):
         # This section specifies the positions and other information of individual atoms.
         atom_positions = [
             "ATOMIC_POSITIONS",
-            "Direct", # The first line signifies method that atom positions are given, e.g. Cartesian or Direct.
+            "Direct",  # The first line signifies method that atom positions are given, e.g. Cartesian or Direct.
             # next lines are atom-specific information, processed in the following code
         ]
 
@@ -379,11 +370,10 @@ class AbacusCalculation(CalcJob):
         #   means this atom is allowed or not to move in the three directions three numbers,
         #   which take value in 0 or 1, control how the atom moved in geometry relaxation calculations
 
-
         # construct atom position dict
         atom_position_dict = {}
         # each key-value pair: key is the kind name, value is a list of atom positions and other parameters
-# this should be given as inputs!
+        # this should be given as inputs!
 
         coordinates = [site.position for site in structure.sites]
 
@@ -391,13 +381,13 @@ class AbacusCalculation(CalcJob):
         # that is even though no 'm' KEYWORD is given, this set of params still need to be given
         # KEYWORD m: the atom is allowed to move in geometry relaxation calculations
         # like [[True, True, True]]
-        move_list = parameters["m"] # default value for move_x, move_y, move_z
+        move_list = parameters["m"]  # default value for move_x, move_y, move_z
 
         ### BELOW are optional keywords!!!###
         # KEYWORD mag or magmom: set the start magnetization for each atom
         # set three number for the xyz commponent of magnetization here (e.g. mag 0.0 0.0 1.0).
 
-        magmom_list = parameters.get("mag") or parameters.get("magmom", []) # default value for mag_x, mag_y, mag_z
+        magmom_list = parameters.get("mag") or parameters.get("magmom", [])  # default value for mag_x, mag_y, mag_z
 
         # Ensure the length of the magnetic moment list is consistent with the number of atoms
         # (fill in empty lists if insufficient)
@@ -405,7 +395,7 @@ class AbacusCalculation(CalcJob):
             if len(magmom_list) != len(structure.sites):
                 #  fill in the default value if the length of the magnetic moment list is insufficient
                 magmom_list += [[] for _ in range(len(structure.sites) - len(magmom_list))]
-        else: # empty list
+        else:  # empty list
             magmom_list = [[] for _ in range(len(structure.sites))]
 
         # Add and count atoms.
@@ -421,36 +411,37 @@ class AbacusCalculation(CalcJob):
             if magmoms:  # if magmom is not empty
                 magmom_float = [float(i) for i in magmoms]  # 转换为浮点数
 
-
             # each position is a line containing the following information:
             position = [
                 *site_coords,
-                "m", # m or NO key word: three numbers, which take value in 0 or 1,
-                     # control how the atom move in geometry relaxation calculations.
+                "m",  # m or NO key word: three numbers, which take value in 0 or 1,
+                # control how the atom move in geometry relaxation calculations.
                 *move_int,
             ]
             # if magmom_float is not empty, add magnetic moment information
             if magmom_float:
-                position.extend(["magmom", # mag or magmom: set the start magnetization for each atom.
-                                *magmom_float])  # In colinear case only one number should be given.
-                                              # In non-colinear case set three number for the xyz commponent of magnetization here
-                                              # (e. g. mag 0.0 0.0 1.0).
-                                              # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
+                position.extend(
+                    [
+                        "magmom",  # mag or magmom: set the start magnetization for each atom.
+                        *magmom_float,
+                    ]
+                )  # In colinear case only one number should be given.
+                # In non-colinear case set three number for the xyz commponent of magnetization here
+                # (e. g. mag 0.0 0.0 1.0).
+                # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
 
             # Other STRU key word parameters parser can be added here.
-
 
             if kind_name not in atom_position_dict:
                 atom_position_dict[kind_name] = {
                     "number_of_atoms": 1,
-# need to add magnetism into readin parameters
+                    # need to add magnetism into readin parameters
                     "initial_magnetic_moment": 0.0,
-                    "positions": []
+                    "positions": [],
                 }
             else:
                 atom_position_dict[kind_name]["number_of_atoms"] += 1
             atom_position_dict[kind_name]["positions"].append(position)
-
 
         # write atom_position_dict into atom_positions
         for kind_name, kind_dict in atom_position_dict.items():
@@ -460,7 +451,6 @@ class AbacusCalculation(CalcJob):
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
 
-
         structure_list.extend(atom_positions)
 
         # Join the structure_list into a single string
@@ -468,14 +458,14 @@ class AbacusCalculation(CalcJob):
         structure_content = "\n".join(structure_list)
         return structure_content, local_copy_list_to_append
 
-
     def write_stru(self, stru_file):
         """
         Write the structure file STRU.
         :return: a list of pseudopotential files to be copied
         """
         structure_content, local_pseudo_copy_list = self.generate_structure(
-            self.inputs.structure, self.inputs.pseudos, self.inputs.parameters["stru"])
+            self.inputs.structure, self.inputs.pseudos, self.inputs.parameters["stru"]
+        )
         with open(stru_file, "w") as handle:
             handle.write(structure_content)
         return local_pseudo_copy_list
