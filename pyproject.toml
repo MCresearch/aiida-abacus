@@ -29,6 +29,7 @@ dependencies = [
 [project.optional-dependencies]
 pre-commit = [
   'pre-commit~=3.5',
+  'hatch',
 ]
 docs = [
     "sphinx",
