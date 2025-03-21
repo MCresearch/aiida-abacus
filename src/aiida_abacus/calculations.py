@@ -14,6 +14,7 @@ from aiida.plugins import DataFactory
 from aiida_pseudo.data.pseudo.upf import UpfData
 
 import numpy as np
+from .common import make_retrieve_list
 
 LegacyUpfData = DataFactory('core.upf')
 
@@ -91,7 +92,13 @@ class AbacusCalculation(CalcJob):
         # Several other parameters could be defined after the atom position using key words.
         # See https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html#more-key-words
         # for details.
-        spec.input("settings", valid_type=orm.Dict, help="Optional parameters in STRU.")
+        spec.input("settings", valid_type=orm.Dict, 
+                   help="""Additional control parameters for how AiiDA behaves for this calculation.
+                   Available options includes: additional_retrieve_list, excluded_retrieve_list,
+                   retrieve_charge_density, include_kpoints, include_internal_parameters
+                   """,
+                   required=False
+                   )
         # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
         # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
@@ -161,12 +168,16 @@ class AbacusCalculation(CalcJob):
         # Prepare a `CalcInfo` to be returned to the engine
         calcinfo = datastructures.CalcInfo()
         calcinfo.codes_info = [codeinfo]
-        
-        
         calcinfo.local_copy_list = local_copy_list
 
         # retrieve the output folder OUT.aiida
-        calcinfo.retrieve_list = [self._OUTPUT_SUBFOLDER, self._ABACUS_OUTPUT]
+        # Gather the list of the files to be retrieved/included
+        settings = {} if 'settings' in self.inputs else self.inputs.settings
+        calcinfo.retrieve_list = [self._ABACUS_OUTPUT, *make_retrieve_list(self.inputs.parameters,
+                                                                           settings,
+                                                                           self._OUTPUT_SUFFIX
+                                                                           )]
+
         print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo

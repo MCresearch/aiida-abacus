@@ -4,6 +4,8 @@ Parsers provided by aiida_abacus.
 Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
+from typing import TextIO
+
 from aiida import orm
 from aiida.common import exceptions
 from aiida.engine import ExitCode
@@ -11,8 +13,13 @@ from aiida.orm import SinglefileData, Str
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
+from ase.io.cif import read_cif
+
+
 import re
 from pathlib import Path
+
+from .common import make_retrieve_list
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
 
@@ -42,68 +49,51 @@ class AbacusParser(Parser):
         :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
         """
         output_folder = self.retrieved
-        calc_paths = AbacusCalculation.get_default_calc_paths()
-        
-        # Check that folder content is as expected
-        files_retrieved = self.retrieved.list_object_names()
-        print("files_retrieved", files_retrieved)
-        
-        # Note: set(A) <= set(B) checks whether A is a subset of B
-        # check that the following results are present
-        # OUTPUT_SUBFOLDER - 'OUT.aiida' folder: contains the output files of ABACUS calculation
-        #       'OUT.aiida/running_scf.log': contains the output of the calculation
-        # ABACUS_OUTPUT - redirected stdout of the calculation, abacus_output
-        files_expected = [
-            calc_paths["OUTPUT_SUBFOLDER"], # 'OUT.aiida' folder
-            calc_paths["ABACUS_OUTPUT"] # abacus_output file
-            ]
-        if not set(files_expected) <= set(files_retrieved):
-            self.logger.error(f"Found files '{files_retrieved}', expected to find '{files_expected}'")
-            return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
-        
+        settings = {} if 'settings' not in self.node.inputs else self.node.inputs.settings
+        expected_files = make_retrieve_list(self.node.inputs.parameters,
+                                             settings, AbacusCalculation._OUTPUT_SUFFIX)
+        # Add the STDOUT diversion
+        expected_files.append(AbacusCalculation._ABACUS_OUTPUT) 
 
-        # add output file
-        running_scf_log_filename = Path(calc_paths["OUTPUT_SUBFOLDER"]) / "running_scf.log"
-        with output_folder.open(running_scf_log_filename, "r") as handle:
-            output = handle.read()
+        # Check if the files are retrieved
+        missing = self.check_retrieve_files(output_folder, expected_files)
 
-        self.logger.info(f"Parsing '{running_scf_log_filename}'")
+        if missing:
+            self.logger.warning(f'The following expected files are missing: {missing}')
+
+        # Parse the calculation task output file
+        main_log = next(filter(expected_files, lambda x: 'running_' in x ))
+        misc_results = {}
+        with output_folder.open(main_log, 'r') as fhandle:
+            parser = AbacusRawParser(fhandle)
+            misc_results.update(parser.parse())
+        misc_node = orm.Dict(dict=misc_results)
+
+        # Parse the structure output
+        fname = next(filter(expected_files, lambda x: 'STRU.cif' in x ))
+        with output_folder.open(fname, 'r') as fhandle:
+            atoms = read_cif(fhandle)
+            self.out('structure', orm.StructureData(ase=atoms))
+
+        # Parse the calculation raw parameters
+        if 'settings'  in self.node.inputs and self.node.inputs.settings.get('include_internal_parameters', False):
+            fname = next(filter(expected_files, lambda x: x.endswith('INPUT')))
+            with output_folder.open(fname, 'r') as fhandle:
+                self.out('internal_parameters', read_internal_parameters(fhandle))
+
+        # Parse the KPOINTS actually used
+        if 'settings'  in self.node.inputs and self.node.inputs.settings.get('include_kpoints', True):
+            fname = next(filter(expected_files, lambda x: x.endswith('kppoints')))
+            with output_folder.open(fname, 'r') as fhandle:
+                coords, weights = read_kpoints_output_file(fhandle)
+                node = orm.KpointsData()
+                node.set_kpoints(coords, weights=weights)
+                # Set the cell based on the  INPUT structure
+                node.set_cell_from_structure(self.node.inputs.structure)
 
 
-        # patter to search for total energy in output file
-        # look for final total energy" !FINAL_ETOT_IS xxx eV"
-        pattern = r"!FINAL_ETOT_IS\s+(-?\d+\.\d+)\s+eV"
-        # search for pattern in output file
-        self.logger.info(f"Searching for pattern '{pattern}'")
-        self.logger.info(f"Contents of file: {output}")
-
-        final_energy_total = self._parse_re_pattern(output, pattern)
-
-        # parse miscellaneaous "misc"
-        # valid_type=orm.Dict
-
-        out_dict = {"final_energy_total": final_energy_total}
-        print("output misc dict:", out_dict)
-        misc_node = orm.Dict(dict=out_dict)
+        # Define the output nodes
         self.out("misc", misc_node)
-
-        return ExitCode(0)
-    
-    def _parse_re_pattern(self, output, pattern):
-        """
-        Parse pattern from output file.
-
-        :param output: output file content
-        :param pattern: regular expression pattern to search for
-        :returns: extracted value
-        """
-        pattern_compile = re.compile(pattern)
-        res = pattern_compile.search(output)
-        if res:
-            value = float(res.group(1))
-        else:
-            value = None
-        return value
 
 
 class AbacusRawParser:
@@ -177,3 +167,35 @@ class AbacusRawParser:
 
         self.is_parsed = True
         return self.results
+
+
+def read_internal_parameters(fhandle: TextIO):
+    """Read the internal parameters"""
+    fhandle.readline()
+    out_dict = {}
+    for line in fhandle:
+        if line.startswith('#'):
+            continue
+        # Remove the trialing # comments
+        match = re.match(r'^(.+) #.*$', line)
+        if match:
+            tokens = match.group(1).split()
+            out_dict[tokens[0]] = tokens[1]
+    return out_dict
+
+def read_kpoints_output_file(fhandle: TextIO):
+    """Read the output kpoints file"""
+
+    line = fhandle.readline()
+    nkpts = int(line.strip().split()[-1])
+    assert fhandle.readline().startswith('K-POINTS DIRECT COORDINATES')
+    fhandle.readline()
+    points = []
+    weights = []
+    for i in range(nkpts):
+        tokens = fhandle.readline().strip().split()
+        ikpts = tokens[0]
+        points.append([float(tokens[i]) for i in range(1, 4)])
+        weights.append(float(tokens[4]))
+
+    return points, weights 
