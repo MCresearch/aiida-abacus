@@ -8,8 +8,6 @@ from typing import TextIO
 
 from aiida import orm
 from aiida.common import exceptions
-from aiida.engine import ExitCode
-from aiida.orm import SinglefileData, Str
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
