@@ -5,15 +5,14 @@ Register calculations via the "aiida.calculations" entry point in setup.json.
 """
 
 import os
+
+from aiida import orm
 from aiida.common import datastructures, exceptions
 from aiida.common.utils import get_unique_filename
 from aiida.engine import CalcJob
-from aiida import orm
 from aiida.plugins import DataFactory
-
 from aiida_pseudo.data.pseudo.upf import UpfData
 
-import numpy as np
 from .common import make_retrieve_list
 
 LegacyUpfData = DataFactory('core.upf')
@@ -92,7 +91,7 @@ class AbacusCalculation(CalcJob):
         # Several other parameters could be defined after the atom position using key words.
         # See https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html#more-key-words
         # for details.
-        spec.input("settings", valid_type=orm.Dict, 
+        spec.input("settings", valid_type=orm.Dict,
                    help="""Additional control parameters for how AiiDA behaves for this calculation.
                    Available options includes: additional_retrieve_list, excluded_retrieve_list,
                    retrieve_charge_density, include_kpoints, include_internal_parameters
@@ -122,10 +121,10 @@ class AbacusCalculation(CalcJob):
         spec.output("misc", valid_type=orm.Dict,
                     help="The scalar outputs or"
                     "small vectors (e.g., energy, forces, stress) of the calculation.")
-        
+
         # abacus_output, which is a Str
         spec.output("abacus_output", valid_type=orm.Str, help="The raw ABACUS output file content.")
-        
+
 
         spec.exit_code(
             300,
@@ -181,7 +180,7 @@ class AbacusCalculation(CalcJob):
         print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo
-    
+
     # make INPUT file content by given parameters dict
     def generate_input(self, parameters: dict) -> str:
         """Generate the content of input file INPUT according to parameters.
@@ -203,7 +202,7 @@ class AbacusCalculation(CalcJob):
     # param string -> INPUT file, call generate_input and write down file
     def write_input(self, input_file):
         """Write the input file INPUT."""
-        
+
         # prepare input content
         parameters = self.inputs.parameters.get_dict()
         # output folder will be OUT.aiida
@@ -216,17 +215,17 @@ class AbacusCalculation(CalcJob):
         input_content = self.generate_input(parameters["input"])
         with open(input_file, "w") as handle:
             handle.write(input_content)
-    
+
     def write_kpoints(self, kpt_file):
         """Write the kpoints file KPT."""
         kpt_list = ["K_POINTS", # kewyword for start
                     "0", # total number of k-point, `0' means generate automatically
                     "Gamma", # which kind of Monkhorst-Pack method, `Gamma' or `MP'
-                    # here we need six numbers, 
+                    # here we need six numbers,
                     # first three number: subdivisions along reciprocal vectors
                     # last three number: shift of the mesh
                     ]
-        
+
         # validation adapted from aiida-quantumespresso\src\aiida_quantumespresso\calculations\__init__.py
         try:
             # Mesh of kpoints: List[int]
@@ -240,7 +239,7 @@ class AbacusCalculation(CalcJob):
             raise exceptions.InputValidationError(
                 "offset list must only be made of 0 or 0.5 floats"
             )
-        
+
         # Convert offset to integers (0 or 1)
         the_offset = [0 if i == 0.0 else 1 for i in offset]
 
@@ -261,7 +260,7 @@ class AbacusCalculation(CalcJob):
 
         # This is the atom file containing all the information about the lattice structure.
         structure_list = []
-        
+
         # adapted from aiida-quantumespresso\src\aiida_quantumespresso\calculations\__init__.py
 
         # copy useful pseudopotential files to the calc pseudo folder
@@ -272,7 +271,7 @@ class AbacusCalculation(CalcJob):
         structure_list = []
 
         # ATOMIC_SPECIES section
-        # This section provides information about the type of chemical elements contained the unit cell. 
+        # This section provides information about the type of chemical elements contained the unit cell.
         # structure_list.append("ATOMIC_SPECIES\n")
         atomic_species = ["ATOMIC_SPECIES"]
 
@@ -288,7 +287,7 @@ class AbacusCalculation(CalcJob):
 
             # if structure_kinds != pseudo_kinds:
             #     return f'The `pseudos` specified and structure kinds do not match: {pseudo_kinds} vs {structure_kinds}'
-            
+
             pseudo = pseudos[kind.name]
             if kind.is_alloy or kind.has_vacancies:
                 raise exceptions.InputValidationError(
@@ -321,7 +320,7 @@ class AbacusCalculation(CalcJob):
         # structure_list.append("\nNUMERICAL_ORBITAL\n")
         # for orbital in structure["numerical_orbital"]:
         #     structure_list.append(orbital)
-        
+
 
         # LATTICE_CONSTANT section
         # The lattice constant of the system in unit of Bohr.
@@ -340,7 +339,7 @@ class AbacusCalculation(CalcJob):
         # lattice_const_in_ang = max(lengths_in_ang)
         # lattice_const_in_bohr = max(lengths_in_bohr)
         # print(f"Calculated LATTICE_CONSTANT: {lattice_const_in_ang} Angstrom")
-        
+
         # print("cell lengths:", structure.cell_lengths)
         # print(f"lattice_const in bohr {lattice_const_in_bohr} Bohr")
 
@@ -379,13 +378,13 @@ class AbacusCalculation(CalcJob):
         # the numbers 0 0 0 (0 or 1 each for false and true) following the coordinates of the atom
         #   means this atom is allowed or not to move in the three directions three numbers,
         #   which take value in 0 or 1, control how the atom moved in geometry relaxation calculations
-        
+
 
         # construct atom position dict
         atom_position_dict = {}
         # each key-value pair: key is the kind name, value is a list of atom positions and other parameters
 # this should be given as inputs!
-        
+
         coordinates = [site.position for site in structure.sites]
 
         ### BELOW are mandatory keywords!!!###
@@ -422,12 +421,12 @@ class AbacusCalculation(CalcJob):
             if magmoms:  # if magmom is not empty
                 magmom_float = [float(i) for i in magmoms]  # 转换为浮点数
 
-            
+
             # each position is a line containing the following information:
             position = [
                 *site_coords,
                 "m", # m or NO key word: three numbers, which take value in 0 or 1,
-                     # control how the atom move in geometry relaxation calculations. 
+                     # control how the atom move in geometry relaxation calculations.
                 *move_int,
             ]
             # if magmom_float is not empty, add magnetic moment information
@@ -437,7 +436,7 @@ class AbacusCalculation(CalcJob):
                                               # In non-colinear case set three number for the xyz commponent of magnetization here
                                               # (e. g. mag 0.0 0.0 1.0).
                                               # Note that if this parameter is set, the initial magnetic moment setting will be overrided.
-            
+
             # Other STRU key word parameters parser can be added here.
 
 
@@ -460,7 +459,7 @@ class AbacusCalculation(CalcJob):
             )
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
-        
+
 
         structure_list.extend(atom_positions)
 
@@ -469,7 +468,7 @@ class AbacusCalculation(CalcJob):
         structure_content = "\n".join(structure_list)
         return structure_content, local_copy_list_to_append
 
-    
+
     def write_stru(self, stru_file):
         """
         Write the structure file STRU.

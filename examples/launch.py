@@ -1,14 +1,10 @@
 """Launch a calculation using the 'aiida-abacus' plugin"""
 # We will use the abacus-develop/examples/scf/pw_Si2 directory as an example
 
-from pathlib import Path
 
-from aiida import engine, orm
-from aiida.orm import Dict, KpointsData, StructureData, load_code, load_group
-from aiida.common.exceptions import NotExistent
-from aiida.plugins import CalculationFactory, DataFactory
 import numpy as np
-
+from aiida import engine, orm
+from aiida.orm import Dict, KpointsData, StructureData, load_group
 
 ###
 # set up code
@@ -164,13 +160,14 @@ c = 5.073
 lattice = [[a, 0, 0], [-a / 2, a / 2 * np.sqrt(3), 0], [0, 0, c]]
 # structure = StructureData(cell=lattice)
 from ase.build import bulk
+
 structure = StructureData(ase=bulk('Si', 'fcc', 5.43))
 
 # structure parameters
 stru_settings ={
     "LATTICE_CONSTANT": 1.8897261258369282,
     # KEYWORD m : whether or not allowed to move in geometry relaxation calculations.
-    # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations. 
+    # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations.
     "m": [
         [True, True, True]
     ],

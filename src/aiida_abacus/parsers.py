@@ -4,18 +4,14 @@ Parsers provided by aiida_abacus.
 Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
+import re
 from typing import TextIO
 
 from aiida import orm
 from aiida.common import exceptions
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
-
 from ase.io.cif import read_cif
-
-
-import re
-from pathlib import Path
 
 from .common import make_retrieve_list
 
@@ -51,7 +47,7 @@ class AbacusParser(Parser):
         expected_files = make_retrieve_list(self.node.inputs.parameters,
                                              settings, AbacusCalculation._OUTPUT_SUFFIX)
         # Add the STDOUT diversion
-        expected_files.append(AbacusCalculation._ABACUS_OUTPUT) 
+        expected_files.append(AbacusCalculation._ABACUS_OUTPUT)
 
         # Check if the files are retrieved
         missing = self.check_retrieve_files(output_folder, expected_files)
@@ -196,4 +192,4 @@ def read_kpoints_output_file(fhandle: TextIO):
         points.append([float(tokens[i]) for i in range(1, 4)])
         weights.append(float(tokens[4]))
 
-    return points, weights 
+    return points, weights

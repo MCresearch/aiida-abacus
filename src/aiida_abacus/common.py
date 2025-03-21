@@ -1,4 +1,5 @@
-from typing import Union, List
+from typing import List, Union
+
 from aiida import orm
 
 DEFAULT_RETRIEVE_FILES = (
@@ -10,7 +11,7 @@ DEFAULT_RETRIEVE_FILES = (
     'istate.info'
 )
 
-def make_retrieve_list(parameters: Union[dict, orm.Dict], settings: Union[dict, orm.Dict], 
+def make_retrieve_list(parameters: Union[dict, orm.Dict], settings: Union[dict, orm.Dict],
                        folder_suffix='AIIDA') -> List[str]:
     """
     Generate the list of file to be retrieved depending out the calculation type

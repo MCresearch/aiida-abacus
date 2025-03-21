@@ -1,14 +1,10 @@
 """Launch a calculation using the 'aiida-abacus' plugin"""
 # Minimal example to launch a calculation using the 'aiida-abacus' plugin on a remote computer.
 
-from pathlib import Path
 
+from aiida import orm
 from aiida.engine import submit
-
-from aiida import engine, orm
 from aiida.orm import Dict, KpointsData, StructureData, load_group
-import numpy as np
-
 
 ###
 # set up code
@@ -53,6 +49,7 @@ input_parameters = {
 # STRU
 
 from ase.build import bulk
+
 structure = StructureData(ase=bulk('Si', 'fcc', 5.43))
 
 # structure parameters

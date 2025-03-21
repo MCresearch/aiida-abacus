@@ -2,14 +2,10 @@
 # We will use the abacus-develop/examples/scf/pw_Si2 directory as an example
 # different pseudos are referenced here!
 
-from pathlib import Path
 
-from aiida import engine, orm
-from aiida.orm import Dict, KpointsData, StructureData, load_code, load_group
-from aiida.common.exceptions import NotExistent
-from aiida.plugins import CalculationFactory, DataFactory
 import numpy as np
-
+from aiida import engine, orm
+from aiida.orm import Dict, KpointsData, StructureData, load_group
 
 ###
 # set up code
@@ -147,7 +143,7 @@ for pos in atomic_positions_fractional:
 stru_settings ={
     "LATTICE_CONSTANT": 10.2,
     # KEYWORD m : whether or not allowed to move in geometry relaxation calculations.
-    # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations. 
+    # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations.
     "m": [
         [False, False, False],
         [True, True, True]
