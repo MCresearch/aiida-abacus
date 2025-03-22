@@ -60,7 +60,7 @@ verdi run launch.py        # run example calculation
 verdi process list -a  # check record of calculation
 ```
 * Running calculations on a cluster is essentially the same, except that you need to configure the remote computer.
-- We provide a simple setup demo `remote-computer-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource.
+- We provide a simple setup demo `remote-slurm-ssh-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource. Please configure `prepend_text` according to your remote environment if Intel® oneAPI Toolkit is used to build ABACUS.
 
 The plugin also includes verdi commands to inspect its data types:
 ```shell
