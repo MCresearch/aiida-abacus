@@ -23,12 +23,14 @@ requires-python = ">=3.9"
 dependencies = [
     "aiida-core>=2.5,<3",
     'aiida-pseudo~=1.1',
-    "voluptuous"
+    "voluptuous",
+    "ase"
 ]
 
 [project.optional-dependencies]
 pre-commit = [
   'pre-commit~=3.5',
+  'hatch',
 ]
 docs = [
     "sphinx",
