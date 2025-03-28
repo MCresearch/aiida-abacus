@@ -14,8 +14,8 @@ def make_retrieve_list(
     type and suffix defined by the user
     """
     calc_type = parameters["input"].get("calculation", "scf")  # Abacus default to SCF file
-    excluded = settings.get("excluded_retrieve_list")
-    additional = settings.get("additional_retrieve_list")
+    excluded = settings.get("excluded_retrieve_list", [])
+    additional = settings.get("additional_retrieve_list", [])
     add_density = settings.get("retrieve_charge_density", False)
 
     files = []
