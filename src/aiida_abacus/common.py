@@ -6,7 +6,10 @@ DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "STRU.cif", "device.log", "warning
 
 
 def make_retrieve_list(
-    parameters: Union[dict, orm.Dict], settings: Union[dict, orm.Dict], folder_suffix="AIIDA"
+    parameters: Union[dict, orm.Dict],
+    settings: Union[dict, orm.Dict],
+    folder_suffix="AIIDA",
+    full_specification=False,
 ) -> List[str]:
     """
     Generate the list of file to be retrieved depending out the calculation type
@@ -32,4 +35,14 @@ def make_retrieve_list(
     files.append(f"OUT.{folder_suffix}/running_{calc_type}.log")
     if add_density:
         files.append(f"OUT.{folder_suffix}/{folder_suffix}-CHARGE-DENSITY.restart")
-    return files
+
+    if full_specification:
+        output = []
+        for filename in files:
+            if "/" in filename:
+                output.append([filename, ".", 2])
+            else:
+                output.append([filename, ".", 0])
+    else:
+        output = files
+    return output
