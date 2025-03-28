@@ -246,7 +246,7 @@ class AbacusCalculation(CalcJob):
     def generate_structure(self, structure, pseudos, parameters) -> str:
         """Generate the content of input file STRU according to structure.
         For detailed documentation,
-        see the `ABACUS Input Guide <https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html>`_.
+        see the ABACUS documentation about the `STRU file <https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html>`_.
         :param structure: a StructureData object
         :param pseudos: a dictionary of pseudopotential nodes
         :param parameters: a dictionary of stru parameters
