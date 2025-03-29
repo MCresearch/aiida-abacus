@@ -66,7 +66,6 @@ class AbacusParser(Parser):
         with output_folder.open(main_log, "r") as fhandle:
             parser = AbacusRawParser(fhandle)
             misc_results.update(parser.parse())
-        breakpoint()
         misc_node = orm.Dict(dict=misc_results)
 
         # Parse the structure output

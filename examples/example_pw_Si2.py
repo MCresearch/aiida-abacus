@@ -134,7 +134,7 @@ stru_settings = {
     "LATTICE_CONSTANT": 10.2,
     # KEYWORD m : whether or not allowed to move in geometry relaxation calculations.
     # three numbers, which take value in 0 or 1, control how the atom move in geometry relaxation calculations.
-    "m": [[False, False, False], [True, True, True]],
+    # "m": [[False, False, False], [True, True, True]],
     # KEYWORD mag or magmom : set the start magnetization for each atom.
     # In colinear case only one number should be given.
     # In non-colinear case set three number for the xyz commponent of magnetization here (e. g. mag 0.0 0.0 1.0).

@@ -2,20 +2,33 @@
 Workflows
 """
 
+import pathlib
+
 from aiida import orm
-from aiida.common.extendeddicts import AttributeDict
-from aiida.engine import while_
+from aiida.common import AttributeDict, exceptions
+from aiida.common.lang import type_check
+from aiida.engine import calcfunction, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
+from aiida.plugins import GroupFactory
 
 from aiida_abacus.calculations import AbacusCalculation
+from aiida_abacus.common import ElectronicType, ProtocolMixin, SpinType, recursive_merge
+
+PseudoDojoFamily = GroupFactory("pseudo.family.pseudo_dojo")
+CutoffsPseudoPotentialFamily = GroupFactory("pseudo.family.cutoffs")
 
 
-class AbacusWorkChain(BaseRestartWorkChain):
+class AbacusWorkChain(ProtocolMixin, BaseRestartWorkChain):
     """
     Base restart workflow for abacus.
     """
 
     _process_class = AbacusCalculation
+
+    @classmethod
+    def get_protocol_filepath(cls) -> pathlib.Path:
+        """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
+        return pathlib.Path(__file__).parent / "protocols/base.yaml"
 
     @classmethod
     def define(cls, spec):
@@ -120,10 +133,130 @@ class AbacusWorkChain(BaseRestartWorkChain):
         """Prepare the inputs for the next calculation."""
         pass
 
+    @classmethod
+    def get_builder_from_protocol(
+        cls,
+        code,
+        structure,
+        protocol=None,
+        overrides=None,
+        electronic_type=ElectronicType.METAL,
+        spin_type=SpinType.NONE,
+        initial_magnetic_moments=None,
+        options=None,
+        **_,
+    ):
+        """Return a builder prepopulated with inputs selected according to the chosen protocol.
 
+        :param code: the ``Code`` instance configured for the ``abacus.abacus`` plugin.
+        :param structure: the ``StructureData`` instance to use.
+        :param protocol: protocol to use, if not specified, the default will be used.
+        :param overrides: optional dictionary of inputs to override the defaults of the protocol.
+        :param electronic_type: indicate the electronic character of the system through ``ElectronicType`` instance.
+        :param spin_type: indicate the spin polarization type to use through a ``SpinType`` instance.
+        :param initial_magnetic_moments: optional dictionary that maps the initial magnetic moment of each kind to a
+            desired value for a spin polarized calculation. Note that in case the ``starting_magnetization`` is also
+            provided in the ``overrides``, this takes precedence over the values provided here. In case neither is
+            provided and ``spin_type == SpinType.COLLINEAR``, an initial guess for the magnetic moments is used.
+        :param options: A dictionary of options that will be recursively set for the ``metadata.options`` input of all
+            the ``CalcJobs`` that are nested in this work chain.
+        :return: a process builder instance with all inputs defined ready for launch.
+        """
+
+        if isinstance(code, str):
+            code = orm.load_code(code)
+
+        type_check(code, orm.AbstractCode)
+        type_check(electronic_type, ElectronicType)
+        type_check(spin_type, SpinType)
+
+        if electronic_type not in [ElectronicType.METAL, ElectronicType.INSULATOR]:
+            raise NotImplementedError(f"electronic type `{electronic_type}` is not supported.")
+
+        if spin_type not in [SpinType.NONE, SpinType.COLLINEAR]:
+            raise NotImplementedError(f"spin type `{spin_type}` is not supported.")
+
+        if initial_magnetic_moments is not None and spin_type is not SpinType.COLLINEAR:
+            raise ValueError(f"`initial_magnetic_moments` is specified but spin type `{spin_type}` is incompatible.")
+
+        inputs = cls.get_protocol_inputs(protocol, overrides)
+
+        meta_parameters = inputs.pop("meta_parameters")
+        pseudo_family = inputs.pop("pseudo_family")
+
+        natoms = len(structure.sites)
+
+        try:
+            pseudo_set = (PseudoDojoFamily, CutoffsPseudoPotentialFamily)
+            pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family}).one()[0]
+        except exceptions.NotExistent as exception:
+            raise ValueError(
+                f"required pseudo family `{pseudo_family}` is not installed. Please use `aiida-pseudo install` to"
+                "install it."
+            ) from exception
+
+        try:
+            cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+            pseudos = pseudo_family.get_pseudos(structure=structure)
+        except ValueError as exception:
+            raise ValueError(
+                f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
+            ) from exception
+
+        # Update the parameters based on the protocol inputs
+        parameters = inputs["abacus"]["parameters"]
+        parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]
+        parameters["input"]["ecutwfc"] = cutoff_wfc
+
+        if electronic_type is ElectronicType.INSULATOR:
+            parameters["input"]["smearing_method"] = "fixed"
+
+        if spin_type is SpinType.COLLINEAR:
+            # Set the initial magnetization
+            pass
+
+        # If overrides are provided, they are considered absolute
+        if overrides:
+            parameter_overrides = overrides.get("abacus", {}).get("parameters", {})
+            parameters = recursive_merge(parameters, parameter_overrides)
+
+            # # if tot_magnetization in overrides , remove starting_magnetization from parameters
+            # if parameters.get('stru', {}).get('tot_magnetization') is not None:
+            #     parameters.setdefault('stru', {}).pop('starting_magnetization', None)
+
+            pseudos_overrides = overrides.get("abacus", {}).get("pseudos", {})
+            pseudos = recursive_merge(pseudos, pseudos_overrides)
+
+        metadata = inputs["abacus"]["metadata"]
+
+        if options:
+            metadata["options"] = recursive_merge(inputs["abacus"]["metadata"]["options"], options)
+
+        # pylint: disable=no-member
+        builder = cls.get_builder()
+        builder.abacus["code"] = code
+        builder.abacus["pseudos"] = pseudos
+        builder.abacus["structure"] = structure
+        builder.abacus["parameters"] = orm.Dict(parameters)
+        builder.abacus["metadata"] = metadata
+        if "settings" in inputs["abacus"]:
+            builder.abacus["settings"] = orm.Dict(inputs["abacus"]["settings"])
+        builder.clean_workdir = orm.Bool(inputs["clean_workdir"])
+        if "kpoints" in inputs:
+            builder.kpoints = inputs["kpoints"]
+        else:
+            builder.kpoints_distance = orm.Float(inputs["kpoints_distance"])
+        builder.kpoints_force_parity = orm.Bool(inputs["kpoints_force_parity"])
+        builder.max_iterations = orm.Int(inputs["max_iterations"])
+        # pylint: enable=no-member
+
+        return builder
+
+
+@calcfunction
 def create_kpoints_from_distance(structure, distance, force_parity):
     """Generate a uniformly spaced kpoint mesh for a given structure.
-    Based on aiida-quantumespresso's function `create_kpoints_from_distance`
+    Based on aiida-abacus's function `create_kpoints_from_distance`
 
     The spacing between kpoints in reciprocal space is guaranteed to be at least the defined distance.
 
