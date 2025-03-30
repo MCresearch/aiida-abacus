@@ -1,6 +1,6 @@
 from aiida import orm
 from aiida.engine import run_get_node
-from aiida_abacus.workflows import AbacusWorkChain
+from aiida_abacus.workflows import AbacusBaseWorkChain
 from ase.build import bulk
 
 Si2 = bulk("Si", "diamond", 5.4)
@@ -8,7 +8,7 @@ computer = orm.load_computer("localhost")
 
 code = orm.load_code("abacus@localhost")
 
-builder = AbacusWorkChain.get_builder()
+builder = AbacusBaseWorkChain.get_builder()
 builder.abacus.code = code
 
 builder.abacus.metadata.options = {
