@@ -142,9 +142,6 @@ class AbacusCalculation(CalcJob):
             required=False,
         )
 
-        # abacus_output, which is a Str
-        spec.output("abacus_output", valid_type=orm.Str, help="The raw ABACUS output file content.")
-
         spec.exit_code(
             300,
             "ERROR_MISSING_OUTPUT_FILES",

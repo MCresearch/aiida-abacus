@@ -71,7 +71,7 @@ class AbacusParser(Parser):
         # Parse the structure output
         fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
         # TODO: there could be other types that should have a output structure
-        if run_type in ["relax", "vc-relax"]:
+        if run_type in ["relax", "cell-relax", "md"]:
             with output_folder.open(fname, "r") as fhandle:
                 atoms = read_cif(fhandle)
                 self.out("structure", orm.StructureData(ase=atoms))
@@ -163,8 +163,11 @@ class AbacusRawParser:
                 if "all_pressure" not in self.results:
                     self.results["all_pressure"] = []
                 self.results["all_pressure"].append(self.results["pressure"])
-            if "!FINAL_ETOT_IS" in line:
+                continue
+            elif "!FINAL_ETOT_IS" in line:
                 self.results["total_energy"] = line.strip().split()[1]
+            elif "NBANDS =" in line:
+                self.results["number_of_bands"] = int(line.strip().split()[-1])
 
         self.is_parsed = True
         return self.results

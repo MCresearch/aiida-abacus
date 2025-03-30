@@ -4,6 +4,7 @@ from typing import List, Optional, Union
 
 import yaml
 from aiida import orm
+from aiida.common import AttributeDict
 
 DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "STRU.cif", "device.log", "warning.log", "istate.info")
 
@@ -191,3 +192,56 @@ class SpinType(enum.Enum):
     COLLINEAR = "collinear"
     NON_COLLINEAR = "non_collinear"
     SPIN_ORBIT = "spin_orbit"
+
+
+class CONSTANTS(enum.Enum):
+    """Constants used in the code."""
+
+    bohr_to_ang = 1.8897259886e-11
+    ry_to_ev = 0.530423239
+    ev = 1.602_176_634e-19
+    ev_ang3_to_kbar = 1 / ev / 1e30 * 10
+
+
+def prepare_process_inputs(process, inputs):
+    """Prepare the inputs for submission for the given process, according to its spec.
+
+    That is to say that when an input is found in the inputs that corresponds to an input port in the spec of the
+    process that expects a `Dict`, yet the value in the inputs is a plain dictionary, the value will be wrapped in by
+    the `Dict` class to create a valid input.
+
+    :param process: sub class of `Process` for which to prepare the inputs dictionary
+    :param inputs: a dictionary of inputs intended for submission of the process
+    :return: a dictionary with all bare dictionaries wrapped in `Dict` if dictated by the process spec
+    """
+    prepared_inputs = wrap_bare_dict_inputs(process.spec().inputs, inputs)
+    return AttributeDict(prepared_inputs)
+
+
+def wrap_bare_dict_inputs(port_namespace, inputs):
+    """Wrap bare dictionaries in `inputs` in a `Dict` node if dictated by the corresponding port in given namespace.
+
+    :param port_namespace: a `PortNamespace`
+    :param inputs: a dictionary of inputs intended for submission of the process
+    :return: a dictionary with all bare dictionaries wrapped in `Dict` if dictated by the port namespace
+    """
+    from aiida.engine.processes import PortNamespace
+
+    wrapped = {}
+
+    for key, value in inputs.items():
+        if key not in port_namespace:
+            wrapped[key] = value
+            continue
+
+        port = port_namespace[key]
+        valid_types = port.valid_type if isinstance(port.valid_type, (list, tuple)) else (port.valid_type,)
+
+        if isinstance(port, PortNamespace):
+            wrapped[key] = wrap_bare_dict_inputs(port, value)
+        elif orm.Dict in valid_types and isinstance(value, dict):
+            wrapped[key] = orm.Dict(value)
+        else:
+            wrapped[key] = value
+
+    return wrapped
