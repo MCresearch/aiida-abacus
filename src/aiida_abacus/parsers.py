@@ -165,9 +165,17 @@ class AbacusRawParser:
                 self.results["all_stress"].append(self.results["stress"])
                 continue
             elif "!FINAL_ETOT_IS" in line:
-                self.results["total_energy"] = line.strip().split()[1]
+                self.results["total_energy"] = float(line.strip().split()[1])
             elif "NBANDS =" in line:
                 self.results["number_of_bands"] = int(line.strip().split()[-1])
+            elif "E_KS(sigma->0)" in line:
+                self.results["extrapolated_0K_energy"] = float(line.strip().split()[-1])
+            elif "E_entropy(-TS)" in line:
+                self.results["ts_contribution"] = float(line.strip().split()[-1])
+
+        if "ts_contribution" in self.results and "total_energy" in self.results:
+            self.results["free_energy"] = self.results["total_energy"] + self.results["ts_contribution"]
+        self.results
 
         self.is_parsed = True
         return self.results
