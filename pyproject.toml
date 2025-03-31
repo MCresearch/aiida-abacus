@@ -33,11 +33,12 @@ pre-commit = [
   'hatch',
 ]
 docs = [
-    "sphinx",
+    "sphinx~=6.2.1",
     "sphinxcontrib-contentui",
     "sphinxcontrib-details-directive",
     "furo",
-    "markupsafe<2.1"
+    "markupsafe<2.1",
+    'sphinx-autoapi~=3.0.0',
 ]
 
 [project.urls]

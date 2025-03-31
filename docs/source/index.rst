@@ -9,7 +9,7 @@ The aiida-abacus plugin for `AiiDA`_
 
    user_guide/index
    developer_guide/index
-   API documentation <apidoc/aiida_abacus>
+   API documentation <reference/api/auto/aiida_abacus/index>
    AiiDA Documentation <https://aiida.readthedocs.io>
 
 If you use this plugin for your research, please cite the following work:
