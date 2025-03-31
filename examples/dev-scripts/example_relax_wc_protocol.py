@@ -1,6 +1,6 @@
 from aiida import orm
 from aiida.engine import run_get_node
-from aiida_abacus.workflows import AbacusRelaxWorkchain
+from aiida_abacus.workflows import AbacusRelaxWorkChain
 from ase.build import bulk
 
 Si2 = bulk("Si", "diamond", 5.4)
@@ -9,7 +9,9 @@ computer = orm.load_computer("localhost")
 
 code = orm.load_code("abacus@localhost")
 
-builder = AbacusRelaxWorkchain.get_builder_from_protocol(code, structure, protocol="fast")
+builder = AbacusRelaxWorkChain.get_builder_from_protocol(code, structure, protocol="fast")
+
+# The options of the calculation still needs to be set manually
 builder.base.abacus.metadata.options = {
     "resources": {
         "num_machines": 1,

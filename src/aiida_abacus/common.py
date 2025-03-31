@@ -199,8 +199,10 @@ class CONSTANTS(enum.Enum):
 
     bohr_to_ang = 1.8897259886e-11
     ry_to_ev = 0.530423239
-    ev = 1.602_176_634e-19
-    ev_ang3_to_kbar = 1 / ev / 1e30 * 10
+    ev_to_j = 1.602_176_634e-19
+    ev_ang3_to_kbar = 1 / ev_to_j / 1e30 * 10
+    ry_bohr3_ev_ang3 = ry_to_ev / bohr_to_ang**3
+    ry_bohr3_to_kbar = ry_bohr3_ev_ang3 * ev_ang3_to_kbar
 
 
 def prepare_process_inputs(process, inputs):

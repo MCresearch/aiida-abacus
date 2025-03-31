@@ -30,8 +30,8 @@ def validate_relax_inputs(inputs, _):
         return "The parameters in `base.abacus.parameters` do not specify the required key `input.calculation`."
 
 
-class AbacusRelaxWorkchain(ProtocolMixin, WorkChain):
-    """Workchain to relax a structure using Abacus"""
+class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
+    """WorkChain to relax a structure using Abacus"""
 
     @classmethod
     def define(cls, spec):
@@ -120,11 +120,10 @@ class AbacusRelaxWorkchain(ProtocolMixin, WorkChain):
         # for more detail
         if relax_type is RelaxType.NONE:
             base.abacus.parameters["input"]["calculation"] = "scf"
-
-        if relax_type is RelaxType.POSITIONS:
+        elif relax_type is RelaxType.POSITIONS:
             base.abacus.parameters["input"]["calculation"] = "relax"
         else:
-            # Variable cell relaxation
+            # All other kinds quires cell change so it has to be cell-relax
             base.abacus.parameters["input"]["calculation"] = "cell-relax"
 
         if relax_type is RelaxType.VOLUME:

@@ -3,6 +3,6 @@ Module contains workchains for abacus
 """
 
 from .base import AbacusBaseWorkChain
-from .relax import AbacusRelaxWorkchain
+from .relax import AbacusRelaxWorkChain
 
-__all__ = ["AbacusBaseWorkChain", "AbacusRelaxWorkchain"]
+__all__ = ["AbacusBaseWorkChain", "AbacusRelaxWorkChain"]
