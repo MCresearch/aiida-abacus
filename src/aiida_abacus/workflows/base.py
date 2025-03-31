@@ -19,9 +19,6 @@ from aiida_abacus.common import (
     recursive_merge,
 )
 
-PseudoDojoFamily = GroupFactory("pseudo.family.pseudo_dojo")
-CutoffsPseudoPotentialFamily = GroupFactory("pseudo.family.cutoffs")
-
 
 class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
     """
@@ -229,7 +226,9 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         natoms = len(structure.sites)
 
         try:
-            pseudo_set = (PseudoDojoFamily, CutoffsPseudoPotentialFamily)
+            family = GroupFactory("pseudo.family.pseudo_dojo")
+            cutoffs = GroupFactory("pseudo.family.cutoffs")
+            pseudo_set = (family, cutoffs)
             pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family}).one()[0]
         except exceptions.NotExistent as exception:
             raise ValueError(
