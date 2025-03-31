@@ -120,10 +120,27 @@ class AbacusCalculation(CalcJob):
             "misc",
             valid_type=orm.Dict,
             help="The scalar outputs or" "small vectors (e.g., energy, forces, stress) of the calculation.",
+            required=True,
+        )
+        spec.output(
+            "structure",
+            valid_type=orm.StructureData,
+            help="Output structure of the calculation.",
+            required=False,
+        )
+        spec.output(
+            "kpoints",
+            valid_type=orm.KpointsData,
+            help="Output structure of the calculation.",
+            required=False,
         )
 
-        # abacus_output, which is a Str
-        spec.output("abacus_output", valid_type=orm.Str, help="The raw ABACUS output file content.")
+        spec.output(
+            "internal_parameters",
+            valid_type=orm.Dict,
+            help="The internal parameters used by the calculation.",
+            required=False,
+        )
 
         spec.exit_code(
             300,
@@ -169,10 +186,10 @@ class AbacusCalculation(CalcJob):
 
         # retrieve the output folder OUT.aiida
         # Gather the list of the files to be retrieved/included
-        settings = {} if "settings" in self.inputs else self.inputs.settings
+        settings = {} if "settings" not in self.inputs else self.inputs.settings
         calcinfo.retrieve_list = [
-            self._ABACUS_OUTPUT,
-            *make_retrieve_list(self.inputs.parameters, settings, self._OUTPUT_SUFFIX),
+            [self._ABACUS_OUTPUT, ".", 0],
+            *make_retrieve_list(self.inputs.parameters, settings, self._OUTPUT_SUFFIX, full_specification=True),
         ]
 
         print("to be retrieved:", calcinfo.retrieve_list)
@@ -334,9 +351,8 @@ class AbacusCalculation(CalcJob):
         # print("cell lengths:", structure.cell_lengths)
         # print(f"lattice_const in bohr {lattice_const_in_bohr} Bohr")
 
-        # from ase/io/onetep.py
-        # 1.889726134583548707935
-        lattice_const_in_bohr = 1.8897259886  # 1.8897259886 Bohr =  1.0 Angstrom
+        # Use the bohr unit given in the abacus documentation
+        lattice_const_in_bohr = 1.889726125457828  # 1.889726125457828  Bohr =  1.0 Angstrom
         if "LATTICE_CONSTANT" in parameters:
             lattice_constant.append(str(parameters["LATTICE_CONSTANT"]))
         else:
@@ -354,8 +370,7 @@ class AbacusCalculation(CalcJob):
         # This section specifies the positions and other information of individual atoms.
         atom_positions = [
             "ATOMIC_POSITIONS",
-            "Direct",  # The first line signifies method that atom positions are given, e.g. Cartesian or Direct.
-            # next lines are atom-specific information, processed in the following code
+            "Cartesian",  # Positions of the sites are in cartesian coordinates given by the StructureData
         ]
 
         # atom position dict consists of 4 parts:
@@ -381,7 +396,10 @@ class AbacusCalculation(CalcJob):
         # that is even though no 'm' KEYWORD is given, this set of params still need to be given
         # KEYWORD m: the atom is allowed to move in geometry relaxation calculations
         # like [[True, True, True]]
-        move_list = parameters.get("m", [])  # default value for move_x, move_y, move_z
+        move_list = parameters.get("m")  # default value for move_x, move_y, move_z
+        if move_list is None:
+            # Default to move the atoms
+            move_list = [[True, True, True]] * len(coordinates)
 
         ### BELOW are optional keywords!!!###
         # KEYWORD mag or magmom: set the start magnetization for each atom
@@ -397,9 +415,9 @@ class AbacusCalculation(CalcJob):
             kind_name = site.kind_name
             position = [*site_coords]
 
-            if move_list:
-                flags = map(int, move_list[i])  # Ensure int type
-                position.extend(["m", *flags])  # Set the move flag for geometry optimization
+            # Add the move flags
+            flags = map(int, move_list[i])  # Ensure int type
+            position.extend(["m", *flags])  # Set the move flag for geometry optimization
 
             # each position is a line containing the following information:
             # In colinear case only one number should be given.

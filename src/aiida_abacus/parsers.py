@@ -47,15 +47,21 @@ class AbacusParser(Parser):
         expected_files = make_retrieve_list(self.node.inputs.parameters, settings, AbacusCalculation._OUTPUT_SUFFIX)
         # Add the STDOUT diversion
         expected_files.append(AbacusCalculation._ABACUS_OUTPUT)
+        run_type = self.node.inputs.parameters["input"].get("calculation", "scf")
 
         # Check if the files are retrieved
-        missing = self.check_retrieve_files(output_folder, expected_files)
+        missing = []
+        for name in expected_files:
+            try:
+                output_folder.get_object(name)
+            except FileNotFoundError:
+                missing.append(name)
 
         if missing:
             self.logger.warning(f"The following expected files are missing: {missing}")
 
         # Parse the calculation task output file
-        main_log = next(filter(expected_files, lambda x: "running_" in x))
+        main_log = next(filter(lambda x: "running_" in x, expected_files))
         misc_results = {}
         with output_folder.open(main_log, "r") as fhandle:
             parser = AbacusRawParser(fhandle)
@@ -63,26 +69,29 @@ class AbacusParser(Parser):
         misc_node = orm.Dict(dict=misc_results)
 
         # Parse the structure output
-        fname = next(filter(expected_files, lambda x: "STRU.cif" in x))
-        with output_folder.open(fname, "r") as fhandle:
-            atoms = read_cif(fhandle)
-            self.out("structure", orm.StructureData(ase=atoms))
+        fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
+        # TODO: there could be other types that should have a output structure
+        if run_type in ["relax", "cell-relax", "md"]:
+            with output_folder.open(fname, "r") as fhandle:
+                atoms = read_cif(fhandle)
+                self.out("structure", orm.StructureData(ase=atoms))
 
         # Parse the calculation raw parameters
         if "settings" in self.node.inputs and self.node.inputs.settings.get("include_internal_parameters", False):
-            fname = next(filter(expected_files, lambda x: x.endswith("INPUT")))
+            fname = next(filter(lambda x: x.endswith("INPUT"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
                 self.out("internal_parameters", read_internal_parameters(fhandle))
 
         # Parse the KPOINTS actually used
-        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_kpoints", True):
-            fname = next(filter(expected_files, lambda x: x.endswith("kppoints")))
+        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_kpoints", False):
+            fname = next(filter(lambda x: x.endswith("kpoints"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
                 coords, weights = read_kpoints_output_file(fhandle)
                 node = orm.KpointsData()
                 node.set_kpoints(coords, weights=weights)
                 # Set the cell based on the  INPUT structure
                 node.set_cell_from_structure(self.node.inputs.structure)
+            self.out("kpoints", node)
 
         # Define the output nodes
         self.out("misc", misc_node)
@@ -117,7 +126,7 @@ class AbacusRawParser:
             all_blocks.append((block_type, block_unit, lines))
 
         all_forces = []
-        all_pressure = []
+        all_stress = []
         # Process the blocks one by one, additional block type can be supported by adding more elifs.
         for block_type, block_unit, lines in all_blocks:
             if block_type == "FORCE":
@@ -132,12 +141,12 @@ class AbacusRawParser:
                 stress = []
                 for line in lines:
                     stress.append([float(token) for token in line.split()])
-                    all_pressure.append(stress)
+                    all_stress.append(stress)
                 self.results["stress_unit"] = block_unit
         self.results["all_forces"] = all_forces
-        self.results["all_pressure"] = all_pressure
+        self.results["all_stress"] = all_stress
         self.results["final_forces"] = all_forces[-1] if all_forces else None
-        self.results["final_pressure"] = all_pressure[-1] if all_pressure else None
+        self.results["final_stress"] = all_stress[-1] if all_stress else None
 
     def parse(self) -> dict:
         """
@@ -148,14 +157,17 @@ class AbacusRawParser:
         self.parse_blocks()
         # Parse the lines one-by-one for general information of the calculation
         for line in self.content.split("\n"):
-            if "TOTAL-PRESSURE" in line:
-                self.results["pressure"] = line.strip().split()[1]
-                self.results["pressure_unit"] = line.strip().split()[2]
-                if "all_pressure" not in self.results:
-                    self.results["all_pressure"] = []
-                self.results["all_pressure"].append(self.results["pressure"])
-            if "!FINAL_ETOT_IS" in line:
+            if "TOTAL-stress" in line:
+                self.results["stress"] = line.strip().split()[1]
+                self.results["stress_unit"] = line.strip().split()[2]
+                if "all_stress" not in self.results:
+                    self.results["all_stress"] = []
+                self.results["all_stress"].append(self.results["stress"])
+                continue
+            elif "!FINAL_ETOT_IS" in line:
                 self.results["total_energy"] = line.strip().split()[1]
+            elif "NBANDS =" in line:
+                self.results["number_of_bands"] = int(line.strip().split()[-1])
 
         self.is_parsed = True
         return self.results
