@@ -1,116 +1,31 @@
-"""
-Parsers provided by aiida_abacus.
-
-Register parsers via the "aiida.parsers" entry point in setup.json.
-"""
-
 import re
+from logging import getLogger
 from pathlib import Path
-from typing import List, TextIO
+from typing import List
 
 import numpy as np
-from aiida import orm
-from aiida.common import exceptions
-from aiida.parsers.parser import Parser
-from aiida.plugins import CalculationFactory
-from ase.io.cif import read_cif
 
-from .common import make_retrieve_list
-
-AbacusCalculation = CalculationFactory("abacus.abacus")
+logger = getLogger(__name__)
 
 
-class AbacusParser(Parser):
-    """
-    Parser class for parsing output of calculation.
-    """
-
-    def __init__(self, node):
-        """
-        Initialize Parser instance
-
-        Checks that the ProcessNode being passed was produced by a AbacusCalculation.
-
-        :param node: ProcessNode of calculation
-        :param type node: :class:`aiida.orm.nodes.process.process.ProcessNode`
-        """
-        super().__init__(node)
-        if not issubclass(node.process_class, AbacusCalculation):
-            raise exceptions.ParsingError("Can only parse AbacusCalculation")
-
-    def parse(self, **kwargs):
-        """
-        Parse outputs, store results in database.
-
-        :returns: an exit code, if parsing fails (or nothing if parsing succeeds)
-        """
-        output_folder = self.retrieved
-        settings = {} if "settings" not in self.node.inputs else self.node.inputs.settings
-        expected_files = make_retrieve_list(self.node.inputs.parameters, settings, AbacusCalculation._OUTPUT_SUFFIX)
-        # Add the STDOUT diversion
-        expected_files.append(AbacusCalculation._ABACUS_OUTPUT)
-        run_type = self.node.inputs.parameters["input"].get("calculation", "scf")
-
-        # Check if the files are retrieved
-        missing = []
-        for name in expected_files:
-            try:
-                output_folder.get_object(name)
-            except FileNotFoundError:
-                missing.append(name)
-
-        if missing:
-            self.logger.warning(f"The following expected files are missing: {missing}")
-
-        # Parse the calculation task output file
-        main_log = next(filter(lambda x: "running_" in x, expected_files))
-        misc_results = {}
-        with output_folder.open(main_log, "r") as fhandle:
-            parser = AbacusRawParser(fhandle)
-            misc_results.update(parser.parse())
-        misc_node = orm.Dict(dict=misc_results)
-
-        # Parse the structure output
-        fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
-        # TODO: there could be other types that should have a output structure
-        if run_type in ["relax", "cell-relax", "md"]:
-            with output_folder.open(fname, "r") as fhandle:
-                atoms = read_cif(fhandle)
-                self.out("structure", orm.StructureData(ase=atoms))
-
-        # Parse the calculation raw parameters
-        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_internal_parameters", False):
-            fname = next(filter(lambda x: x.endswith("INPUT"), expected_files))
-            with output_folder.open(fname, "r") as fhandle:
-                self.out("internal_parameters", read_internal_parameters(fhandle))
-
-        # Parse the KPOINTS actually used
-        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_kpoints", False):
-            fname = next(filter(lambda x: x.endswith("kpoints"), expected_files))
-            with output_folder.open(fname, "r") as fhandle:
-                coords, weights = read_kpoints_output_file(fhandle)
-                node = orm.KpointsData()
-                node.set_kpoints(coords, weights=weights)
-                # Set the cell based on the  INPUT structure
-                node.set_cell_from_structure(self.node.inputs.structure)
-            self.out("kpoints", node)
-
-        # Define the output nodes
-        self.out("misc", misc_node)
+class BaseRawParser:
+    def __init__(self, fhandle):
+        """A parser for the ABACUS output file."""
+        if not hasattr(fhandle, "read"):
+            self.content = Path(fhandle).read_text()
+        else:
+            self.content = fhandle.read()
+        self.lines = self.content.split("\n")
 
 
-class AbacusRawParser:
+class AbacusRawParser(BaseRawParser):
     """
     A parser to process abacus output files (running_xxx.log)
     """
 
     def __init__(self, fhandle):
         """A parser for the ABACUS output file."""
-        if not hasattr(fhandle, 'read'):
-            self.content = Path(fhandle).read_text()
-        else:
-            self.content = fhandle.read()
-        self.lines = self.content.split("\n")
+        super().__init__(fhandle)
         self.results = {}
         self.is_parsed = False
 
@@ -182,14 +97,13 @@ class AbacusRawParser:
         """Parse the kpoints involved in the calculation"""
 
         kdirect = BlockParser(
-            self.lines, re.compile(r"^K-POINTS (DIRECT) COORDINATES"), offset=2, types=[
-                int, float, float, float, float
-            ]
+            self.lines, re.compile(r"^K-POINTS (DIRECT) COORDINATES"), offset=2, types=[int, float, float, float, float]
         ).parse()
         kcart = BlockParser(
-            self.lines, re.compile(r"^K-POINTS (CARTESIAN) COORDINATES"), offset=2, types=[
-                int, float, float, float, float
-            ]
+            self.lines,
+            re.compile(r"^K-POINTS (CARTESIAN) COORDINATES"),
+            offset=2,
+            types=[int, float, float, float, float],
         ).parse()
         if len(kdirect) == 0:
             raise ValueError("No kpoints data found")
@@ -199,20 +113,26 @@ class AbacusRawParser:
         # Return an array made of kpoint coordinates and weight, remove the kpoint index
         return np.array(kdirect[-1][1])[:, 1:], np.array(kcart[-1][1])[:, 1:]
 
-
     def parse_eigenvalues(self):
         """Parse the eigenvalues"""
 
         nspins = int(re.search(r"NSPIN == (\d)", self.content).group(1))
-        parser = BlockParser(self.lines,
-                            re.compile(r"^ (\d+)/(\d+) kpoint \(Cartesian\) *= *([-0-9.]+) ([-0-9.]+) ([-0-9.]+)"),
-                            offset=1, types=[int, float, float],
-                            )
+        nkthis_procs = int(re.search(r"k-point number in this process = (\d+)", self.content).group(1))
+        parser = BlockParser(
+            self.lines,
+            re.compile(r"^ (\d+)/(\d+) kpoint \(Cartesian\) *= *([-0-9.]+) ([-0-9.]+) ([-0-9.]+)"),
+            offset=1,
+            types=[int, float, float],
+        )
         blocks = parser.parse()
         eigenvalues = {}
         occupations = {}
         ntot = len(blocks)
         nkpts = ntot // nspins
+        # NOTE: Abacus only report the kpoint on the head MPI process!
+        # TODO: Raise a PR to the developers to include all kpoints in the log file.
+        if nkpts != nkthis_procs:
+            logger.wanning("The number of kpoint is (), but only () on this proc")
         assert ntot % nspins == 0
         kpt_cart = np.zeros((nkpts, 3))
         # Process all blocks
@@ -222,9 +142,9 @@ class AbacusRawParser:
             if i == 0:
                 nkpt_tot = int(key[1])
                 assert nkpt_tot == nkpts, "Mismatch in kpont number possible unsupported spin type"
-            kpt_cart[ikpt-1, 0] = float(key[2])
-            kpt_cart[ikpt-1, 1] = float(key[3])
-            kpt_cart[ikpt-1, 2] = float(key[4])
+            kpt_cart[ikpt - 1, 0] = float(key[2])
+            kpt_cart[ikpt - 1, 1] = float(key[3])
+            kpt_cart[ikpt - 1, 2] = float(key[4])
             # Check which spin we are with
             ispin = i // nkpts
             if ispin not in eigenvalues:
@@ -241,24 +161,27 @@ class AbacusRawParser:
         eigen_arrays = []
         occ_arrays = []
         for spin in range(nspins):
-            eigen_arrays.append(np.stack([eigenvalues[spin][i] for i in range(1, nkpts+1)], axis=0))
-            occ_arrays.append(np.stack([occupations[spin][i] for i in range(1, nkpts+1)], axis=0))
+            eigen_arrays.append(np.stack([eigenvalues[spin][i] for i in range(1, nkpts + 1)], axis=0))
+            occ_arrays.append(np.stack([occupations[spin][i] for i in range(1, nkpts + 1)], axis=0))
         return np.stack(eigen_arrays, axis=0), np.stack(occ_arrays, axis=0), kpt_cart
+
 
 class BlockParser:
     """Parser to extract blocks of data"""
-    DEFAULT_END_CHAR = ['------', '++++++']
-    def __init__(self, lines:List[str], key_re, offset=1, types=None, end_characters=None):
+
+    DEFAULT_END_CHAR = ["------", "++++++"]
+
+    def __init__(self, lines: List[str], key_re, offset=1, types=None, end_characters=None):
         """
         A parser to parse blocks of data by searching a title line
-
-        HEADER
-        XXXX
-        ---------
-        A 1 B 2 
-        A 1 B 2 
-        C 1 D 2 
-        ---------
+        Example:
+            HEADER  <- header line used for matching
+            XXXX       ^
+            ---------  |
+            A 1 B 2    | Data starts here so offset is 3
+            A 1 B 2
+            C 1 D 2
+            ---------  <- data ends here so the end character is "-----" (default)
 
         :param lines: A list contains string of each line
         :param key_re: The regular expression to match the presence of the block
@@ -300,6 +223,7 @@ class BlockParser:
         if self.types is not None:
             self.blocks = self.convert_type()
         return self.blocks
+
     def convert_type(self):
         """Convert the match data to the correct type"""
         assert self.blocks
@@ -313,40 +237,14 @@ class BlockParser:
         return converted
 
 
+class BandsParser(BaseRawParser):
+    """Parser to process the BNADS_XX.dat files"""
 
-
-
-
-
-
-
-def read_internal_parameters(fhandle: TextIO):
-    """Read the internal parameters"""
-    fhandle.readline()
-    out_dict = {}
-    for line in fhandle:
-        if line.startswith("#"):
-            continue
-        # Remove the trialing # comments
-        match = re.match(r"^(.+) #.*$", line)
-        if match:
-            tokens = match.group(1).split()
-            out_dict[tokens[0]] = tokens[1]
-    return out_dict
-
-
-def read_kpoints_output_file(fhandle: TextIO):
-    """Read the output kpoints file"""
-
-    line = fhandle.readline()
-    nkpts = int(line.strip().split()[-1])
-    assert fhandle.readline().startswith("K-POINTS DIRECT COORDINATES")
-    fhandle.readline()
-    points = []
-    weights = []
-    for i in range(nkpts):
-        tokens = fhandle.readline().strip().split()
-        points.append([float(tokens[i]) for i in range(1, 4)])
-        weights.append(float(tokens[4]))
-
-    return points, weights
+    def parse(self):
+        """Parse the bands.dat file"""
+        arrays = []
+        for line in self.lines:
+            if not line:
+                continue
+            arrays.append(np.fromstring(line, sep=" ", dtype=float))
+        return np.stack(arrays, axis=0)[:, 1:]
