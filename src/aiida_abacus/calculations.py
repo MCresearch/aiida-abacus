@@ -443,8 +443,10 @@ class AbacusCalculation(CalcJob):
 
         # write atom_position_dict into atom_positions
         for kind_name, kind_dict in atom_position_dict.items():
+            mag = kind_dict['initial_magnetic_moment']
+            natoms = kind_dict['number_of_atoms']
             atom_positions.append(
-                f"{kind_name}\n{kind_dict["initial_magnetic_moment"]}\n{kind_dict['number_of_atoms']}"
+                f"{kind_name}\n{mag}\n{natoms}"
             )
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
