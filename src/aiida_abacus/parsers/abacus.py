@@ -4,9 +4,6 @@ Parsers provided by aiida_abacus.
 Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
-import re
-from typing import TextIO
-
 from aiida import orm
 from aiida.common import exceptions
 from aiida.parsers.parser import Parser
@@ -14,9 +11,15 @@ from aiida.plugins import CalculationFactory
 from ase.io.cif import read_cif
 
 from ..common import make_retrieve_list
-from .raw_parsers import AbacusRawParser
+from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
+
+DEFAULT_OUTPUT_SETTINGS = {
+    "bands": False,
+    "internal_parameters": False,
+    "kpoints": False,
+}
 
 
 class AbacusParser(Parser):
@@ -66,8 +69,17 @@ class AbacusParser(Parser):
         misc_results = {}
         with output_folder.open(main_log, "r") as fhandle:
             parser = AbacusRawParser(fhandle)
-            misc_results.update(parser.parse())
+        misc_results.update(parser.parse())
         misc_node = orm.Dict(dict=misc_results)
+
+        # Parse the bands output if requested
+        if self.include_node("bands"):
+            eigenvalues, occupations = parser.parse_eigenvalues()
+            kpoints_log, weights_log = parser.parse_kpoints()
+            node = orm.BandsData()
+            node.set_kpoints(kpoints_log, weights=weights_log)
+            node.set_bands(eigenvalues, occupations=occupations)
+            self.outputs("bands", node)
 
         # Parse the structure output
         fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
@@ -75,56 +87,35 @@ class AbacusParser(Parser):
         if run_type in ["relax", "cell-relax", "md"]:
             with output_folder.open(fname, "r") as fhandle:
                 atoms = read_cif(fhandle)
-                self.out("structure", orm.StructureData(ase=atoms))
+            self.out("structure", orm.StructureData(ase=atoms))
 
         # Parse the calculation raw parameters
-        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_internal_parameters", False):
+        if self.include_node("internal_parameters"):
             fname = next(filter(lambda x: x.endswith("INPUT"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
-                self.out("internal_parameters", read_internal_parameters(fhandle))
+                parser = InternalParametersParser(fhandle)
+            self.out("internal_parameters", orm.Dict(parser.parse()))
 
         # Parse the KPOINTS actually used
-        if "settings" in self.node.inputs and self.node.inputs.settings.get("include_kpoints", False):
+        if self.include_node("kpoints"):
             fname = next(filter(lambda x: x.endswith("kpoints"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
-                coords, weights = read_kpoints_output_file(fhandle)
-                node = orm.KpointsData()
-                node.set_kpoints(coords, weights=weights)
-                # Set the cell based on the  INPUT structure
-                node.set_cell_from_structure(self.node.inputs.structure)
+                parser = KpointsParser(fhandle)
+                coords, weights = parser.parse()
+            node = orm.KpointsData()
+            node.set_kpoints(coords, weights=weights)
+            # Set the cell based on the  INPUT structure
+            node.set_cell_from_structure(self.node.inputs.structure)
             self.out("kpoints", node)
 
         # Define the output nodes
         self.out("misc", misc_node)
 
+    def include_node(self, name: str):
+        """
+        Check wether to include certain output node
+        """
 
-def read_internal_parameters(fhandle: TextIO):
-    """Read the internal parameters"""
-    fhandle.readline()
-    out_dict = {}
-    for line in fhandle:
-        if line.startswith("#"):
-            continue
-        # Remove the trialing # comments
-        match = re.match(r"^(.+) #.*$", line)
-        if match:
-            tokens = match.group(1).split()
-            out_dict[tokens[0]] = tokens[1]
-    return out_dict
-
-
-def read_kpoints_output_file(fhandle: TextIO):
-    """Read the output kpoints file"""
-
-    line = fhandle.readline()
-    nkpts = int(line.strip().split()[-1])
-    assert fhandle.readline().startswith("K-POINTS DIRECT COORDINATES")
-    fhandle.readline()
-    points = []
-    weights = []
-    for i in range(nkpts):
-        tokens = fhandle.readline().strip().split()
-        points.append([float(tokens[i]) for i in range(1, 4)])
-        weights.append(float(tokens[4]))
-
-    return points, weights
+        if "settings" not in self.node.inputs:
+            return DEFAULT_OUTPUT_SETTINGS[name]
+        return self.node.inputs.settings.get("include_" + name, DEFAULT_OUTPUT_SETTINGS[name])

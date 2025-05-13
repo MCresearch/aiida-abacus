@@ -247,4 +247,56 @@ class BandsParser(BaseRawParser):
             if not line:
                 continue
             arrays.append(np.fromstring(line, sep=" ", dtype=float))
-        return np.stack(arrays, axis=0)[:, 1:]
+        data = np.stack(arrays, axis=0)[:, 1:]
+        kdist = data[:, 0]
+        eigenvalues = data[:, 1:]
+        return kdist, eigenvalues
+
+
+class KpointsParser(BaseRawParser):
+    """
+    Parse the kpoints file in the suffix.out folder
+    """
+
+    def parse(self):
+        """Read the output kpoints file"""
+
+        line = self.lines[0]
+        nkpts = int(line.strip().split()[-1])
+        assert self.lines[1].startswith("K-POINTS DIRECT COORDINATES")
+        points = []
+        weights = []
+        for i in range(nkpts):
+            tokens = self.lines[i + 3].strip().split()
+            points.append([float(tokens[i]) for i in range(1, 4)])
+            weights.append(float(tokens[4]))
+        return points, weights
+
+
+class InternalParametersParser(BaseRawParser):
+    """
+    Parse the INPUT file in the suffix.out folder
+    NOTE: This does not work for a general INPUT file
+    """
+
+    def parse(self):
+        """Read the output internal parameters file"""
+        out_dict = {}
+        # Skip the first line
+        for _line in self.lines[1:]:
+            if _line.startswith("#"):
+                continue
+            line = _line.strip()
+            if not line:
+                continue
+            # Remove the trialing # comments
+            match = re.match(r"^(.+) *#.*$", line)
+            if match:
+                tokens = match.group(1).split(maxsplit=1)
+            else:
+                tokens = line.split(maxsplit=1)
+            # Add potential null value
+            if len(tokens) != 2:
+                tokens.append("None")
+            out_dict[tokens[0].strip()] = tokens[1].strip()
+        return out_dict
