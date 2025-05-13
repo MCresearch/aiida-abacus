@@ -6,6 +6,7 @@ Register calculations via the "aiida.calculations" entry point in setup.json.
 
 import os
 
+import numpy as np
 from aiida import orm
 from aiida.common import datastructures, exceptions
 from aiida.common.utils import get_unique_filename
@@ -112,6 +113,13 @@ class AbacusCalculation(CalcJob):
             dynamic=True,
         )
 
+        spec.input(
+            "restart_folder",
+            valid_type=orm.RemoteData,
+            help="Existing calculation folder to restart from.",
+            required=False,
+        )
+
         # misc stands for miscellaneous, which is some of
         # the scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.
         # extracted from the output file OUT.aiida/running_scf.log
@@ -139,6 +147,13 @@ class AbacusCalculation(CalcJob):
             "internal_parameters",
             valid_type=orm.Dict,
             help="The internal parameters used by the calculation.",
+            required=False,
+        )
+
+        spec.output(
+            "bands",
+            valid_type=orm.BandsData,
+            help="Band structure",
             required=False,
         )
 
@@ -184,6 +199,16 @@ class AbacusCalculation(CalcJob):
         calcinfo.codes_info = [codeinfo]
         calcinfo.local_copy_list = local_copy_list
 
+        # Remote copy
+        if "restart_folder" in self.inputs:
+            calcinfo.remote_copy_list = [
+                (
+                    self.inputs.restart_folder.computer.uuid,
+                    self.inputs.restart_folder.get_remote_path() + "/" + self._OUTPUT_SUBFOLDER,
+                    self._OUTPUT_SUBFOLDER,
+                )
+            ]
+
         # retrieve the output folder OUT.aiida
         # Gather the list of the files to be retrieved/included
         settings = {} if "settings" not in self.inputs else self.inputs.settings
@@ -191,8 +216,6 @@ class AbacusCalculation(CalcJob):
             [self._ABACUS_OUTPUT, ".", 0],
             *make_retrieve_list(self.inputs.parameters, settings, self._OUTPUT_SUFFIX, full_specification=True),
         ]
-
-        print("to be retrieved:", calcinfo.retrieve_list)
 
         return calcinfo
 
@@ -233,32 +256,56 @@ class AbacusCalculation(CalcJob):
 
     def write_kpoints(self, kpt_file):
         """Write the kpoints file KPT."""
-        kpt_list = [
-            "K_POINTS",  # kewyword for start
-            "0",  # total number of k-point, `0' means generate automatically
-            "Gamma",  # which kind of Monkhorst-Pack method, `Gamma' or `MP'
-            # here we need six numbers,
-            # first three number: subdivisions along reciprocal vectors
-            # last three number: shift of the mesh
-        ]
-
         # validation adapted from aiida-quantumespresso\src\aiida_quantumespresso\calculations\__init__.py
-        try:
+        knode = self.inputs.kpoints
+        if "mesh" in knode.base.attributes:
+            kpt_list = [
+                "K_POINTS",  # keyword for start, must be set to this value
+                "0",  # total number of k-point, `0' means generate automatically
+                "Gamma",  # which kind of Monkhorst-Pack method, `Gamma' or `MP'
+                # here we need six numbers,
+                # first three number: subdivisions along reciprocal vectors
+                # last three number: shift of the mesh
+            ]
             # Mesh of kpoints: List[int]
             # Offset of the mesh: List[float]
             mesh, offset = self.inputs.kpoints.get_kpoints_mesh()
-        except AttributeError as exceptions:
-            raise exceptions.InputValidationError("No mesh found in KpoitnsData.")
-        if any([i not in [0, 0.5] for i in offset]):
-            raise exceptions.InputValidationError("offset list must only be made of 0 or 0.5 floats")
+            if any([i not in [0, 0.5] for i in offset]):
+                raise exceptions.InputValidationError("offset list must only be made of 0 or 0.5 floats")
+            # Convert offset to integers (0 or 1)
+            the_offset = [0 if i == 0.0 else 1 for i in offset]
 
-        # Convert offset to integers (0 or 1)
-        the_offset = [0 if i == 0.0 else 1 for i in offset]
+            kpt_list.append(f"{' '.join(map(str, mesh + the_offset))}\n")
 
-        kpt_list.append(f"{' '.join(map(str, mesh + the_offset))}\n")
+        else:
+            kpoints = knode.get_kpoints()
+            if "weights" in knode.get_arraynames():
+                weights = knode.get_array("weights")
+            else:
+                weights = np.ones(len(kpoints)) * (1 / len(kpoints))
 
+            kpt_list = [
+                "K_POINTS",  # keyword for start, must be set to this value
+                f"{len(kpoints)}",
+                "Direct",
+            ]
+            labels = knode.labels
+            if labels is not None:
+                labels_map = dict(labels)
+            else:
+                labels_map = {}
+            for i, coord in enumerate(kpoints):
+                label = labels_map.get(i)
+                # Write labels if they exist
+                # No effect to the calculation, but nice to have when checking raw input files
+                if label is None:
+                    kpt_list.append(f"{coord[0]:.14f} {coord[1]:.14f} {coord[2]:.14f} {weights[i]:.14f}")
+                else:
+                    kpt_list.append(f"{coord[0]:.14f} {coord[1]:.14f} {coord[2]:.14f} {weights[i]:.14f} // {label}")
+
+        # Write to the file
         with open(kpt_file, "w") as handle:
-            handle.write("\n".join(kpt_list))
+            handle.write("\n".join(kpt_list) + "\n")
 
     def generate_structure(self, structure, pseudos, parameters) -> str:
         """Generate the content of input file STRU according to structure.

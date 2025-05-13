@@ -73,13 +73,14 @@ class AbacusParser(Parser):
         misc_node = orm.Dict(dict=misc_results)
 
         # Parse the bands output if requested
-        if self.include_node("bands"):
-            eigenvalues, occupations = parser.parse_eigenvalues()
+        if self.check_include_node("bands"):
+            eigenvalues, occupations, _ = parser.parse_eigenvalues()
             kpoints_log, weights_log = parser.parse_kpoints()
             node = orm.BandsData()
             node.set_kpoints(kpoints_log, weights=weights_log)
             node.set_bands(eigenvalues, occupations=occupations)
-            self.outputs("bands", node)
+            node.labels = self.node.inputs.kpoints.labels
+            self.out("bands", node)
 
         # Parse the structure output
         fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
@@ -90,14 +91,14 @@ class AbacusParser(Parser):
             self.out("structure", orm.StructureData(ase=atoms))
 
         # Parse the calculation raw parameters
-        if self.include_node("internal_parameters"):
+        if self.check_include_node("internal_parameters"):
             fname = next(filter(lambda x: x.endswith("INPUT"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
                 parser = InternalParametersParser(fhandle)
             self.out("internal_parameters", orm.Dict(parser.parse()))
 
         # Parse the KPOINTS actually used
-        if self.include_node("kpoints"):
+        if self.check_include_node("kpoints"):
             fname = next(filter(lambda x: x.endswith("kpoints"), expected_files))
             with output_folder.open(fname, "r") as fhandle:
                 parser = KpointsParser(fhandle)
@@ -111,7 +112,7 @@ class AbacusParser(Parser):
         # Define the output nodes
         self.out("misc", misc_node)
 
-    def include_node(self, name: str):
+    def check_include_node(self, name: str):
         """
         Check wether to include certain output node
         """

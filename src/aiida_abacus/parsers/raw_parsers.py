@@ -114,7 +114,10 @@ class AbacusRawParser(BaseRawParser):
         return np.array(kdirect[-1][1])[:, 1:], np.array(kcart[-1][1])[:, 1:]
 
     def parse_eigenvalues(self):
-        """Parse the eigenvalues"""
+        """
+        Parse the eigenvalues
+        :return: A tuple of eigenvalues and occupations and k-points (in cartesian coordinates)
+        """
 
         nspins = int(re.search(r"NSPIN == (\d)", self.content).group(1))
         nkthis_procs = int(re.search(r"k-point number in this process = (\d+)", self.content).group(1))
@@ -155,9 +158,9 @@ class AbacusRawParser(BaseRawParser):
             eigenvalues[ispin][ikpt] = np.array(energy)
             occupations[ispin][ikpt] = np.array(occ)
         # Construct overall block
-        nkpts = len(eigenvalues[1])
+        nkpts = len(eigenvalues[0])
         nspins = len(eigenvalues)
-        assert max(eigenvalues[1].keys()) == nkpts
+        assert max(eigenvalues[0].keys()) == nkpts
         eigen_arrays = []
         occ_arrays = []
         for spin in range(nspins):
