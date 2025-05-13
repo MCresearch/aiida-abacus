@@ -14,6 +14,8 @@ from aiida.engine import CalcJob
 from aiida.plugins import DataFactory
 from aiida_pseudo.data.pseudo.upf import UpfData
 
+from aiida_abacus.data.orbital import OrbitalData
+
 from .common import make_retrieve_list
 
 LegacyUpfData = DataFactory("core.upf")
@@ -248,7 +250,8 @@ class AbacusCalculation(CalcJob):
         # parameters.suffix = "aiida"
         # folder for pseudopotentials, default is ./pseudo/
         parameters["input"]["pseudo_dir"] = self._PSEUDO_SUBFOLDER
-        # parameters.pseudo_dir = self._PSEUDO_SUBFOLDER
+        # folder for orbitals, default is ./orbital/
+        parameters["input"]["orbital_dir"] = self._ORBITAL_SUBFOLDER
 
         input_content = self.generate_input(parameters["input"])
         with open(input_file, "w") as handle:
@@ -352,17 +355,15 @@ class AbacusCalculation(CalcJob):
                 raise exceptions.InputValidationError(
                     f"Kind '{kind.name}' is an alloy or has vacancies. This is not allowed for pw.x input structures."
                 )
-
-            try:
-                # If it is the same pseudopotential file, use the same filename
-                filename = pseudo_filenames[pseudo.pk]
-            except KeyError:
-                # The pseudo was not encountered yet; use a new name and also add it to the local copy list
+            if pseudo.pk not in pseudo_filenames:
                 filename = get_unique_filename(pseudo.filename, list(pseudo_filenames.values()))
                 pseudo_filenames[pseudo.pk] = filename
                 local_copy_list_to_append.append(
                     (pseudo.uuid, pseudo.filename, os.path.join(self._PSEUDO_SUBFOLDER, filename))
                 )
+            else:
+                # Pseudopotential file already copied
+                filename = pseudo_filenames[pseudo.pk]
 
             kind_names.append(kind.name)
             atomic_species.append(f"{kind.name.ljust(6)} {kind.mass:^8}  {filename}")
@@ -377,6 +378,31 @@ class AbacusCalculation(CalcJob):
         # structure_list.append("\nNUMERICAL_ORBITAL\n")
         # for orbital in structure["numerical_orbital"]:
         #     structure_list.append(orbital)
+
+        numberial_orbital = ["NUMERICAL_ORBITAL"]
+        kind_names = []
+        # append the orbtial files stored in the node to the list of files to be copied
+        # The OrbtialData node has a second file whose filename is stored under the key filename_second
+        orbital_filenames = {}
+        for kind in structure.kinds:
+            pseudo = pseudos[kind.name]
+            if not isinstance(pseudo, OrbitalData):
+                continue
+            if pseudo.pk not in orbital_filenames:
+                filename = get_unique_filename(pseudo.filename_second, list(orbital_filenames.values()))
+                orbital_filenames[pseudo.pk] = filename
+                local_copy_list_to_append.append(
+                    (pseudo.uuid, pseudo.filename_second, os.path.join(self._ORBITAL_SUBFOLDER, filename))
+                )
+            else:
+                # Pseudopotential file already included
+                filename = orbital_filenames[pseudo.pk]
+
+            kind_names.append(kind.name)
+            numberial_orbital.append(f"{filename}")
+        # Only add if there are orbital files
+        if numberial_orbital:
+            structure_list.extend(numberial_orbital)
 
         # LATTICE_CONSTANT section
         # The lattice constant of the system in unit of Bohr.

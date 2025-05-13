@@ -49,7 +49,7 @@ docs = [
 Source = "https://github.com/MCresearch/aiida-abacus"
 
 [project.entry-points."aiida.data"]
-"abacus" = "aiida_abacus.data:AbacusParameters"
+"abacus.orbital" = "aiida_abacus.data.orbital:OrbitalData"
 
 [project.entry-points."aiida.calculations"]
 "abacus.abacus" = "aiida_abacus.calculations:AbacusCalculation"
