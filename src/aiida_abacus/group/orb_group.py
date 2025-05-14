@@ -80,22 +80,45 @@ class AtomicOrbitalCollection(orm.Group):
         )
         q.append(AtomicOrbitalData, with_group="group", filters=node_filters)
         try:
-            node = q.one()
+            node = q.one()[0]
         except MultipleObjectsError as _:
             raise MultipleObjectsError("More than one orbital found for the given parameters")
         except NotExistent as _:
             raise NotExistent("No orbital found for the given parameters")
         return node
 
-    def create_family(self, orbital_type, rcuts_dict: t.Union[dict, str]):
-        """Create a PseudopotentialFamily using a given specification"""
+    def create_family(self, family_label, orbital_type, rcuts_dict: t.Union[dict, str]):
+        """
+        Create a PseudopotentialFamily using a given specification
+        :param family_label: Label for the family
+        :param orbital_type: Type of orbital, usually dzp or tzdp.
+        :param rcuts_dict: Dictionary of rcut values for each element or path to a JSON file.
+        :return: PseudopotentialFamily created based on the rcuts_dict and the orbital_type.
+        """
         if isinstance(rcuts_dict, str):
             rcuts_dict = json.loads(pathlib.Path(rcuts_dict).read_text())
         orbs = []
-        family = PseudoPotentialFamily()
-        for element, rcut in rcuts_dict.items():
-            orb = self.get_orbital(element, orbital_type, rcut)
+        # Find all elements
+        elements = set([orb.element for orb in self.nodes])
+        for element in tqdm(elements, desc="Processing element"):
+            rcut = rcuts_dict.get(element)
+            if rcut is None:
+                rcut = rcuts_dict["Other"]
+            orb = None
+            # Find suitable cut off distance
+            while rcut <= 12:
+                try:
+                    orb = self.get_orbital(element, orbital_type, rcut)
+                except NotExistent as _:
+                    print(f"No orbital found for {element} with rcut {rcut}, " " trying increasing it by 1")
+                    rcut += 1
+                if orb is not None:
+                    break
+            if orb is None:
+                raise NotExistent(f"No orbital found for {element} with rcut {rcut}")
             orbs.append(orb)
+        family = PseudoPotentialFamily(label=family_label)
+        family.store()
         family.add_nodes(orbs)
         return family
 
