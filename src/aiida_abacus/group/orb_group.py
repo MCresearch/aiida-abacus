@@ -117,7 +117,7 @@ class AtomicOrbitalCollection(orm.Group):
             if orb is None:
                 raise NotExistent(f"No orbital found for {element} with rcut {rcut}")
             orbs.append(orb)
-        family = PseudoPotentialFamily(label=family_label)
+        family = AtomicOrbitalFamily(label=family_label)
         family.store()
         family.add_nodes(orbs)
         return family
