@@ -24,7 +24,8 @@ dependencies = [
     "aiida-core>=2.5,<3",
     'aiida-pseudo~=1.1',
     "voluptuous",
-    "ase"
+    "ase",
+    "tqdm"
 ]
 
 [project.optional-dependencies]

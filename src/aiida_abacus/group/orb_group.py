@@ -6,6 +6,7 @@ from aiida import orm
 from aiida.common.exceptions import MultipleObjectsError, NotExistent
 from aiida_pseudo.data.pseudo.upf import parse_element
 from aiida_pseudo.groups.family import PseudoPotentialFamily
+from tqdm import tqdm
 
 from aiida_abacus.data.orbital import AtomicOrbitalData
 
@@ -28,7 +29,7 @@ class AtomicOrbitalCollection(orm.Group):
         pp_path = pathlib.Path(repository) / f"{set_name}/Pseudopotential"
         orb_path = pathlib.Path(repository) / f"{set_name}/Orbitals"
         new_nodes = []
-        for path in pp_path.glob("*.upf"):
+        for path in tqdm(list(pp_path.glob("*.upf")), desc="Scanning elements"):
             element = parse_element(path.read_text())
             # Find the corresponding orbital
             for orb_folder in orb_path.glob(f"{element}_*"):
@@ -46,7 +47,7 @@ class AtomicOrbitalCollection(orm.Group):
         group = cls.collection.get_or_create(label=group_label)[0]
         print(f"Number of existing nodes in group {group_label}: {group.count()}")
         if not dryrun:
-            for node in new_nodes:
+            for node in tqdm(new_nodes, desc="Storing nodes"):
                 node.store()
             group.add_nodes(new_nodes)
         else:
