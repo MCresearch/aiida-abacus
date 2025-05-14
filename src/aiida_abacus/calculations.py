@@ -14,7 +14,7 @@ from aiida.engine import CalcJob
 from aiida.plugins import DataFactory
 from aiida_pseudo.data.pseudo.upf import UpfData
 
-from aiida_abacus.data.orbital import OrbitalData
+from aiida_abacus.data.orbital import AtomicOrbitalData
 
 from .common import make_retrieve_list
 
@@ -386,7 +386,7 @@ class AbacusCalculation(CalcJob):
         orbital_filenames = {}
         for kind in structure.kinds:
             pseudo = pseudos[kind.name]
-            if not isinstance(pseudo, OrbitalData):
+            if not isinstance(pseudo, AtomicOrbitalData):
                 continue
             if pseudo.pk not in orbital_filenames:
                 filename = get_unique_filename(pseudo.filename_second, list(orbital_filenames.values()))

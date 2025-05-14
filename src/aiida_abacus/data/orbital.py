@@ -109,13 +109,17 @@ class DualfileMixin:
         self.base.attributes.set("filename_second", key)
 
 
-class OrbitalData(UpfData, DualfileMixin):
+class AtomicOrbitalData(UpfData, DualfileMixin):
     """
     Abacus orbital data
     This is essentially an UpfData with a second file attached
     """
 
     _key_md5_orbital = "md5_orbital"
+    _key_electron_config = "electron_config"
+    _key_cut_off_energy = "cut_off_energy_ry"
+    _key_orbital_type = "orbital_type"
+    _key_functional = "functional"
 
     def __init__(
         self,
@@ -134,6 +138,28 @@ class OrbitalData(UpfData, DualfileMixin):
         super().__init__(file, filename, **kwargs)
         if orbital_file is not None:
             self.set_file_second(orbital_file, filename=orbital_filename)
+
+    @property
+    def cut_off_energy(self) -> float:
+        """
+        Return the cut off energy used for orbital generation
+        """
+        return self.base.attributes.get(self._key_cutoff, None)
+
+    @property
+    def functional(self) -> t.Optional[str]:
+        """Return the functional used for orbital generation"""
+        return self.base.attributes.get(self._key_functional, None)
+
+    @property
+    def orbital_type(self) -> t.Optional[str]:
+        """Return the orbital type used for orbital generation"""
+        return self.base.attributes.get(self._key_orbital_type, None)
+
+    @property
+    def electron_config(self) -> t.Optional[str]:
+        """Return the orbital type used for orbital generation"""
+        return self.base.attributes.get(self._key_electron_config, None)
 
     @property
     def md5_orbital(self) -> t.Optional[int]:
