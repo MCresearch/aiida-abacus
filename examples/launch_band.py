@@ -28,10 +28,11 @@ builder.structure = seekpathout["primitive_structure"]
 builder.kpoints = KpointsData()
 builder.kpoints.set_kpoints_mesh([8, 8, 8], offset=[0.5, 0.5, 0.5])
 pseudo_family = load_group("PseudoDojo/0.4/PBE/SR/standard/upf")
-builder.pseudos = pseudo_family.get_pseudos(structure=structure)
+# builder.pseudos = pseudo_family.get_pseudos(structure=structure)
+builder.pseudos = {"Si": orm.load_node("49841b6d-5829-4d5b-b16f-133db53b9d4c")}
 builder.parameters = {
     "input": {
-        "basis_type": "pw",
+        "basis_type": "lcao",
         "ecutwfc": 100,
         "scf_thr": 1e-4,  # 1e-7,
         "device": "cpu",
@@ -44,7 +45,7 @@ results, node = engine.run.get_node(builder)
 # Switch to none-scf parameters
 builder.parameters = {
     "input": {
-        "basis_type": "pw",
+        "basis_type": "lcao",
         "ecutwfc": 100,
         "scf_thr": 1e-4,  # 1e-7,
         "device": "cpu",
