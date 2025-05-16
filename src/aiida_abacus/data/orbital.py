@@ -144,7 +144,7 @@ class AtomicOrbitalData(UpfData, DualfileMixin):
         """
         Return the cut off energy used for orbital generation
         """
-        return self.base.attributes.get(self._key_cutoff, None)
+        return self.base.attributes.get(self._key_cut_off_energy, None)
 
     @property
     def functional(self) -> t.Optional[str]:
@@ -223,7 +223,9 @@ class AtomicOrbitalData(UpfData, DualfileMixin):
         orb = query.first(flat=True)
 
         if not orb:
+            # Seek back to the beginning of the file
             source.seek(0)
+            source_orbital.seek(0)
             orb = cls(source, source_orbital, filename, filename_orbital)
         return orb
 
