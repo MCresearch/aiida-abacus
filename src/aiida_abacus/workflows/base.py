@@ -18,6 +18,7 @@ from aiida_abacus.common import (
     SpinType,
     recursive_merge,
 )
+from aiida_abacus.group.orb_group import AtomicOrbitalFamily
 
 
 class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
@@ -221,28 +222,42 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         inputs = cls.get_protocol_inputs(protocol, overrides)
 
         meta_parameters = inputs.pop("meta_parameters")
-        pseudo_family = inputs.pop("pseudo_family")
+        pseudo_family_name = inputs.pop("pseudo_family")
 
         natoms = len(structure.sites)
 
+        # Setting up the pseudo that is a AtomicOrbitalFamily
+        pseudo_family = None
+        cutoff_wfc = None
         try:
-            family = GroupFactory("pseudo.family.pseudo_dojo")
-            cutoffs = GroupFactory("pseudo.family.cutoffs")
-            pseudo_set = (family, cutoffs)
-            pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family}).one()[0]
-        except exceptions.NotExistent as exception:
-            raise ValueError(
-                f"required pseudo family `{pseudo_family}` is not installed. Please use `aiida-pseudo install` to"
-                "install it."
-            ) from exception
-
-        try:
-            cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+            pseudo_family = (
+                orm.QueryBuilder().append(AtomicOrbitalFamily, filters={"label": pseudo_family_name}).one()[0]
+            )
             pseudos = pseudo_family.get_pseudos(structure=structure)
-        except ValueError as exception:
-            raise ValueError(
-                f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
-            ) from exception
+            cutoff_wfc = next(iter(pseudos.values())).cut_off_energy  # Use the first pseudo's cut off energy
+        except exceptions.NotExistent:
+            pass
+
+        if pseudo_family is None:
+            # Setting up the pseudo that is a dojo family
+            try:
+                family = GroupFactory("pseudo.family.pseudo_dojo")
+                cutoffs = GroupFactory("pseudo.family.cutoffs")
+                pseudo_set = (family, cutoffs)
+                pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family_name}).one()[0]
+            except exceptions.NotExistent as exception:
+                raise ValueError(
+                    f"required pseudo family `{pseudo_family}` is not installed. Please use `aiida-pseudo install` to"
+                    "install it."
+                ) from exception
+
+            try:
+                cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+                pseudos = pseudo_family.get_pseudos(structure=structure)
+            except ValueError as exception:
+                raise ValueError(
+                    f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
+                ) from exception
 
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
