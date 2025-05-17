@@ -26,6 +26,7 @@ pip install .
 # if you want to make a change to the plugin
 ```
 
+We recommend using ABACUS LTS (v3.10). This is a long-term supported stable release. The LTS version will only receive essential bug fixes and performance optimization PRs, without introducing code modifications that might affect computational accuracy and precision, nor changes to output formats. Output format changes introduced by the rapidly iterating `develop` version may not be supported.
 
 ### Pseudopotentials
 We use the [`aiida-pseudo` plugin](https://pypi.org/project/aiida-pseudo/) to install and manage pseudopotentials.
