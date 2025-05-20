@@ -94,7 +94,11 @@ class AbacusRawParser(BaseRawParser):
         return self.results
 
     def parse_kpoints(self):
-        """Parse the kpoints involved in the calculation"""
+        """
+        Parse the kpoints involved in the calculation
+
+        :return: A tuple of kpoints in direct and cartesian coordinates
+        """
 
         kdirect = BlockParser(
             self.lines, re.compile(r"^K-POINTS (DIRECT) COORDINATES"), offset=2, types=[int, float, float, float, float]
@@ -111,7 +115,7 @@ class AbacusRawParser(BaseRawParser):
             raise ValueError("Multiple sets of kpoints data found")
         # Take the last set of kpoint reported
         # Return an array made of kpoint coordinates and weight, remove the kpoint index
-        return np.array(kdirect[-1][1])[:, 1:4], np.array(kcart[-1][1])[:, 4]
+        return np.array(kdirect[-1][1])[:, 1:], np.array(kcart[-1][1])[:, 1:]
 
     def parse_eigenvalues(self):
         """

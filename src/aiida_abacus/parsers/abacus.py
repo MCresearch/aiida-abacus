@@ -75,9 +75,12 @@ class AbacusParser(Parser):
         # Parse the bands output if requested
         if self.check_include_node("bands"):
             eigenvalues, occupations, _ = parser.parse_eigenvalues()
-            kpoints_log, weights_log = parser.parse_kpoints()
+            kpoints_direct, _ = parser.parse_kpoints()
+            kcoord = kpoints_direct[:, :3]
+            kweights = kpoints_direct[:, 3]
             node = orm.BandsData()
-            node.set_kpoints(kpoints_log, weights=weights_log)
+            node.set_kpoints(kcoord, weights=kweights)
+            assert kcoord.shape[0] == eigenvalues.shape[1], "Inconsistent number of kpoints reported (do not use kpar)"
             node.set_bands(eigenvalues, occupations=occupations)
             node.labels = self.node.inputs.kpoints.labels
             self.out("bands", node)
