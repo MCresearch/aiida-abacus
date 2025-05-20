@@ -2,6 +2,7 @@
 Tests for the parsers
 """
 
+import pytest
 from aiida_abacus.parsers.raw_parsers import AbacusRawParser, BandsParser, InternalParametersParser, KpointsParser
 
 
@@ -13,6 +14,11 @@ def test_eigenvalues(data_folder):
     parser = AbacusRawParser(data_folder / "band_Al_pw/running_nscf.log")
     eigen, occ, kpt_cart = parser.parse_eigenvalues()
     assert eigen.shape == (2, 61, 15)
+
+    kpt_frac, weights = parser.parse_kpoints()
+    assert kpt_frac.shape == (122, 3)
+    assert weights.shape == (122,)
+    assert sum(weights) == pytest.approx(1.0, abs=1e-3)  # Too few number of decimals TODO: raise issue
 
 
 def test_kpoints_parser(data_folder):

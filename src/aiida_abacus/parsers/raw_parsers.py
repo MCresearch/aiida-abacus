@@ -111,7 +111,7 @@ class AbacusRawParser(BaseRawParser):
             raise ValueError("Multiple sets of kpoints data found")
         # Take the last set of kpoint reported
         # Return an array made of kpoint coordinates and weight, remove the kpoint index
-        return np.array(kdirect[-1][1])[:, 1:], np.array(kcart[-1][1])[:, 1:]
+        return np.array(kdirect[-1][1])[:, 1:4], np.array(kcart[-1][1])[:, 4]
 
     def parse_eigenvalues(self):
         """
