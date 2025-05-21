@@ -6,7 +6,7 @@ import yaml
 from aiida import orm
 from aiida.common import AttributeDict
 
-DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "STRU.cif", "device.log", "warning.log", "istate.info")
+DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "device.log", "warning.log", "istate.info", "STRU_ION_D", "STRU_ION*_D")
 
 
 def make_retrieve_list(
