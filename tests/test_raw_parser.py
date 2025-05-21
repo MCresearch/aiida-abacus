@@ -4,7 +4,13 @@ Tests for the parsers
 
 import numpy as np
 import pytest
-from aiida_abacus.parsers.raw_parsers import AbacusRawParser, BandsParser, InternalParametersParser, KpointsParser
+from aiida_abacus.parsers.raw_parsers import (
+    AbacusRawParser,
+    BandsParser,
+    InternalParametersParser,
+    KpointsParser,
+    StruParser,
+)
 
 
 def test_eigenvalues(data_folder):
@@ -49,3 +55,27 @@ def test_bands_parser(data_folder):
     kdist, eigenvalues = parser.parse()
     assert len(kdist) == 122
     assert eigenvalues.shape == (122, 15)
+
+
+def test_stru_parser(data_folder):
+    parser = StruParser(data_folder / "pw_Si2/STRU")
+    cell, positions, species = parser.parse()
+    assert species == ["Si", "Si"]
+    a = 10.2 * 0.5 / 1.8897261255
+    np.testing.assert_allclose(cell, np.array([[a, a, 0], [a, 0, a], [0, a, a]]))
+    np.testing.assert_allclose(positions, np.array([[0, 0, 0], [0.5 * a, 0.5 * a, 0.5 * a]]))
+    parser = StruParser(data_folder / "STRU_ION_D")
+    cell, positions, species = parser.parse()
+    assert species == ["Cd", "Cd", "Cd", "Cd", "Sn", "Sn", "Sn", "Sn"]
+    a = 10.2 * 0.5 / 1.8897261255
+    np.testing.assert_allclose(
+        cell,
+        np.array(
+            [
+                [6.6539429744, 0.0000000000, 0.0000000000],
+                [0.0000000000, 6.6539429744, 0.0000000000],
+                [0.0000000000, 0.0000000000, 13.1571816610],
+            ]
+        ),
+    )
+    np.testing.assert_allclose(positions[0], [0.0, 0.0, 13.1571816610])

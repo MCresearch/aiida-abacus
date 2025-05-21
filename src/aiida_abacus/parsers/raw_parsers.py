@@ -307,3 +307,70 @@ class InternalParametersParser(BaseRawParser):
                 tokens.append("None")
             out_dict[tokens[0].strip()] = tokens[1].strip()
         return out_dict
+
+
+class StruParser(BaseRawParser):
+    def parse(self):
+        """Parse a STRU file"""
+        blocks = self.parse_blocks()
+        lattice_constant = float(blocks["LATTICE_CONSTANT"][0])  # In bohr
+        lattice_vectors = np.array([[float(value) for value in line.split()] for line in blocks["LATTICE_VECTORS"]])
+        positions = []
+        species = []
+        # magnetic_moments = []
+        pos_block = blocks["ATOMIC_POSITIONS"]
+        coord_type = pos_block[0]
+        current_specie = None
+        p = 1
+        while p < len(pos_block):
+            current_specie = pos_block[p]
+            # current_magmom = float(pos_block[p+1])
+            current_natoms = float(pos_block[p + 2])
+            for i in range(int(current_natoms)):
+                tokens = pos_block[p + 3 + i].split()
+                positions.append([float(value) for value in tokens[:3]])
+                species.append(current_specie)
+            p += 3 + int(current_natoms)
+        positions = np.array(positions)
+        # Lattice vectors in angstrom
+        lattice_vectors *= lattice_constant / 1.8897261255
+
+        if coord_type == "Direct":
+            positions = positions @ lattice_vectors
+        elif coord_type == "Cartesian":
+            positions *= lattice_constant / 1.8897261255
+        elif coord_type == "Cartesian_au":
+            positions *= 1.0 / 1.8897261255
+        elif coord_type == "Cartesian_angstrom":
+            pass
+        else:
+            raise ValueError(f"Unknown coordinate type {coord_type}")
+        return lattice_vectors, positions, species
+
+    def parse_blocks(self):
+        """Split the file content by their blocks"""
+        keywords = ["ATOMIC_SPECIES", "LATTICE_CONSTANT", "LATTICE_VECTORS", "ATOMIC_POSITIONS"]
+        blocks = {}
+        current_block = None
+        for _line in self.lines:
+            line = _line.strip()
+            # Skip comment lines
+            if not line or line.startswith("#"):
+                continue
+            # Remove any trailing comments
+            line = line.split("#", maxsplit=1)[0].strip()
+            # Check if we are in a block title line
+            is_title = False
+            for block_name in keywords:
+                if block_name in line:
+                    current_block = block_name
+                    blocks[current_block] = []
+                    is_title = True
+                    continue
+            if is_title:
+                continue
+            # We are in a block - record the content
+            if current_block is not None:
+                blocks[current_block].append(line)
+        self.blocks = blocks
+        return blocks
