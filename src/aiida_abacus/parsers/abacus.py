@@ -8,10 +8,9 @@ from aiida import orm
 from aiida.common import exceptions
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
-from ase.io.cif import read_cif
 
 from ..common import make_retrieve_list
-from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser
+from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
 
@@ -86,12 +85,16 @@ class AbacusParser(Parser):
             self.out("bands", node)
 
         # Parse the structure output
-        fname = next(filter(lambda x: "STRU.cif" in x, expected_files))
+        fname = next(filter(lambda x: "STRU_ION_D" in x, expected_files))
         # TODO: there could be other types that should have a output structure
         if run_type in ["relax", "cell-relax", "md"]:
             with output_folder.open(fname, "r") as fhandle:
-                atoms = read_cif(fhandle)
-            self.out("structure", orm.StructureData(ase=atoms))
+                parser = StruParser(fhandle)
+                cell, positions, speices = parser.parse()
+            node = orm.StructureData(cell=cell)
+            for pos, symbol in zip(positions, speices):
+                node.append_atom(position=pos, symbols=symbol)
+            self.out("structure", node)
 
         # Parse the calculation raw parameters
         if self.check_include_node("internal_parameters"):
