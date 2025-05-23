@@ -84,17 +84,18 @@ class AbacusParser(Parser):
             node.labels = self.node.inputs.kpoints.labels
             self.out("bands", node)
 
-        # Parse the structure output
-        fname = next(filter(lambda x: "STRU_ION_D" in x, expected_files))
         # TODO: there could be other types that should have a output structure
         if run_type in ["relax", "cell-relax", "md"]:
+            # Parse the final structure
+            fname = next(filter(lambda x: "STRU_ION_D" in x, expected_files))
             with output_folder.open(fname, "r") as fhandle:
                 parser = StruParser(fhandle)
-                cell, positions, speices = parser.parse()
+                cell, positions, species = parser.parse_structure()
             node = orm.StructureData(cell=cell)
-            for pos, symbol in zip(positions, speices):
+            for pos, symbol in zip(positions, species):
                 node.append_atom(position=pos, symbols=symbol)
             self.out("structure", node)
+            # TODO parse the trajectory output from STRU_ION*_D files
 
         # Parse the calculation raw parameters
         if self.check_include_node("internal_parameters"):

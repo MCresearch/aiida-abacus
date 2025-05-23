@@ -310,8 +310,15 @@ class InternalParametersParser(BaseRawParser):
 
 
 class StruParser(BaseRawParser):
+    """
+    Parse a STRU file
+    """
+
     def parse(self):
-        """Parse a STRU file"""
+        """
+        Parse a STRU file
+        :returns: A tuple of lattice vectors, positions, species.
+        """
         blocks = self.parse_blocks()
         lattice_constant = float(blocks["LATTICE_CONSTANT"][0])  # In bohr
         lattice_vectors = np.array([[float(value) for value in line.split()] for line in blocks["LATTICE_VECTORS"]])
@@ -345,7 +352,12 @@ class StruParser(BaseRawParser):
             pass
         else:
             raise ValueError(f"Unknown coordinate type {coord_type}")
+        self.structure = {"lattice_vectors": lattice_vectors, "species": species, "positions": positions}
         return lattice_vectors, positions, species
+
+    def parse_structure(self):
+        """Parse for the structure"""
+        return self.parse()
 
     def parse_blocks(self):
         """Split the file content by their blocks"""
