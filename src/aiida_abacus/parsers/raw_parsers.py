@@ -77,7 +77,7 @@ class AbacusRawParser(BaseRawParser):
         """
         self.parse_blocks()
         # Parse the lines one-by-one for general information of the calculation
-        for line in self.content.split("\n"):
+        for line in self.lines:
             if "TOTAL-stress" in line:
                 self.results["stress"] = line.strip().split()[1]
                 self.results["stress_unit"] = line.strip().split()[2]
@@ -89,6 +89,8 @@ class AbacusRawParser(BaseRawParser):
                 self.results["total_energy"] = line.strip().split()[1]
             elif "NBANDS =" in line:
                 self.results["number_of_bands"] = int(line.strip().split()[-1])
+            elif "EFERMI" in line:
+                self.results["fermi_level"] = float(line.strip().split()[-2])
 
         self.is_parsed = True
         return self.results
