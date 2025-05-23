@@ -82,6 +82,8 @@ class AbacusParser(Parser):
             assert kcoord.shape[0] == eigenvalues.shape[1], "Inconsistent number of kpoints reported (do not use kpar)"
             node.set_bands(eigenvalues, occupations=occupations)
             node.labels = self.node.inputs.kpoints.labels
+            # Record the fermi level - the unit is eV
+            node.base.attributes.set("fermi_level", misc_node.get("fermi_level"))
             self.out("bands", node)
 
         # TODO: there could be other types that should have a output structure
