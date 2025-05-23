@@ -230,7 +230,7 @@ class AbacusBandWorkChain(WorkChain):
                 self.report(f"Bands calculation finished with error, exit_status: {bands}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_BANDS_FAILED
             # Set the fermi level in extras based on that from the SCF workchain
-            bands.outputs.bands.extras.set("fermi_level", self.ctx.scf_workchain.outputs.misc.get("fermi_level"))
+            bands.outputs.bands.base.extras.set("fermi_level", self.ctx.scf_workchain.outputs.misc.get("fermi_level"))
             self.out("band_structure", bands.outputs.bands)
 
         if "dos_workchain" in self.ctx:
