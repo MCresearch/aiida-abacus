@@ -25,6 +25,7 @@ dependencies = [
     'aiida-pseudo~=1.1',
     "voluptuous",
     "ase",
+    "pydantic",
     "tqdm"
 ]
 

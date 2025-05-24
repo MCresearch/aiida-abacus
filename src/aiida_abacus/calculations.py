@@ -14,6 +14,7 @@ from aiida.engine import CalcJob
 from aiida.plugins import DataFactory
 from aiida_pseudo.data.pseudo.upf import UpfData
 
+from aiida_abacus.common.opthold import SettingsOptions
 from aiida_abacus.data.orbital import AtomicOrbitalData
 
 from .common import make_retrieve_list
@@ -93,10 +94,9 @@ class AbacusCalculation(CalcJob):
         spec.input(
             "settings",
             valid_type=orm.Dict,
-            help="""Additional control parameters for how AiiDA behaves for this calculation.
-                   Available options includes: additional_retrieve_list, excluded_retrieve_list,
-                   retrieve_charge_density, include_kpoints, include_internal_parameters
-                   """,
+            validator=SettingsOptions.aiida_validate,
+            serializer=SettingsOptions.aiida_serialize,
+            help=SettingsOptions.aiida_description(),
             required=False,
         )
         # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
@@ -516,11 +516,9 @@ class AbacusCalculation(CalcJob):
 
         # write atom_position_dict into atom_positions
         for kind_name, kind_dict in atom_position_dict.items():
-            mag = kind_dict['initial_magnetic_moment']
-            natoms = kind_dict['number_of_atoms']
-            atom_positions.append(
-                f"{kind_name}\n{mag}\n{natoms}"
-            )
+            mag = kind_dict["initial_magnetic_moment"]
+            natoms = kind_dict["number_of_atoms"]
+            atom_positions.append(f"{kind_name}\n{mag}\n{natoms}")
             for position in kind_dict["positions"]:
                 atom_positions.append(" ".join(map(str, position)))
 
