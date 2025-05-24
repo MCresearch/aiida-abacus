@@ -64,7 +64,7 @@ class AbacusBandWorkChain(WorkChain):
                 cls.verify_scf,
             ),
             cls.run_bands_dos,
-            cls.inspect_bands_dos,
+            cls.verify_bands_dos,
         )
         spec.output("band_structure", valid_type=orm.BandsData, help="Output band structure data.")
         spec.output(
@@ -174,6 +174,7 @@ class AbacusBandWorkChain(WorkChain):
         inputs = self.ctx.scf_inputs
         # Make the structure is the updated structure
         inputs.abacus.structure = self.ctx.structure
+        # Configure the pseudopotentials
         paramdict = inputs.abacus.parameters.get_dict()
         # Make sure the calculation saves the charge
         paramdict["input"]["out_chg"] = 1
@@ -219,24 +220,28 @@ class AbacusBandWorkChain(WorkChain):
 
         return ToContext(**running)
 
-    def inspect_bands_dos(self):
+    def verify_bands_dos(self):
         """Inspect the bands and dos calculations"""
 
         exit_code = None
 
         if "band_workchain" in self.ctx:
-            bands = self.ctx.band_workchain
-            if not bands.is_finished_ok:
-                self.report(f"Bands calculation finished with error, exit_status: {bands}")
+            band_workchain = self.ctx.band_workchain
+            if not band_workchain.is_finished_ok:
+                self.report(f"Bands calculation finished with error, exit_status: {band_workchain}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_BANDS_FAILED
-            # Set the fermi level in extras based on that from the SCF workchain
-            bands.outputs.bands.base.extras.set("fermi_level", self.ctx.scf_workchain.outputs.misc.get("fermi_level"))
-            self.out("band_structure", bands.outputs.bands)
+            else:
+                # Set the fermi level for the output band structure based on previous SCF calculation
+                if band_workchain.outputs.bands.attributes.get("fermi_level") is None:
+                    out_bands = add_fermi_level(band_workchain.outputs.bands, self.ctx.scf_workchain.outputs.misc)
+                else:
+                    out_bands = band_workchain.outputs.bands
+                self.out("band_structure", out_bands)
 
         if "dos_workchain" in self.ctx:
-            dos = self.ctx.dos_workchain
-            if not dos.is_finished_ok:
-                self.report(f"DOS calculation finished with error, exit_status: {dos.exit_status}")
+            dos_workchain = self.ctx.dos_workchain
+            if not dos_workchain.is_finished_ok:
+                self.report(f"DOS calculation finished with error, exit_status: {dos_workchain.exit_status}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_DOS_FAILED
 
         return exit_code
@@ -263,3 +268,11 @@ def seekpath_structure_analysis(structure, band_settings):
 
     # All keyword arugments should be `Data` node instances of base type and so should have the `.value` attribute
     return get_explicit_kpoints_path(structure, **band_settings.get_dict())
+
+
+@calcfunction
+def add_fermi_level(bands: orm.BandsData, misc: orm.Dict):
+    """Add fermi level to the bands"""
+    new_bands = bands.clone()
+    new_bands.base.attributes.set("fermi_level", misc.get("fermi_level"))
+    return new_bands

@@ -69,12 +69,12 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             "for any non-periodic directions.",
         )
         spec.input(
-            "pseudos_family",
+            "pseudo_family",
             valid_type=orm.Str,
             serializer=to_aiida_type,
             required=False,
             help="Name of pseudopotential family to use for the calculation.",
-            validator=check_pseudos_family,
+            validator=check_pseudo_family,
         )
         spec.outline(
             cls.setup,
@@ -178,6 +178,15 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(AbacusCalculation, "abacus"))
 
         self.ctx.inputs.parameters = self.ctx.inputs.parameters.get_dict()
+        if "pseudo_family" in self.inputs:
+            pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
+                self.inputs.abacus.structure, self.inputs.pseudo_family.value
+            )
+            self.ctx.inputs.pseudos = pseudos
+            # Set the default ecutwfc if not specified
+            if self.ctx.inputs.parameters["input"].get("ecutwfc", None) is None:
+                self.ctx.inputs.parameters["input"]["ecutwfc"] = cutoff_wfc
+                self.report(f"Using the default cut off energy from the pseudopotentials {cutoff_wfc} Ry.")
 
         # calculation_type = self.ctx.inputs.parameters['input'].get('type', 'scf')
 
@@ -240,43 +249,13 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         natoms = len(structure.sites)
 
-        # Setting up the pseudo that is a AtomicOrbitalFamily
-        pseudo_family = None
-        cutoff_wfc = None
-        try:
-            pseudo_family = (
-                orm.QueryBuilder().append(AtomicOrbitalFamily, filters={"label": pseudo_family_name}).one()[0]
-            )
-            pseudos = pseudo_family.get_pseudos(structure=structure)
-            cutoff_wfc = next(iter(pseudos.values())).cut_off_energy  # Use the first pseudo's cut off energy
-        except exceptions.NotExistent:
-            pass
-
-        if pseudo_family is None:
-            # Setting up the pseudo that is a dojo family
-            try:
-                family = GroupFactory("pseudo.family.pseudo_dojo")
-                cutoffs = GroupFactory("pseudo.family.cutoffs")
-                pseudo_set = (family, cutoffs)
-                pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family_name}).one()[0]
-            except exceptions.NotExistent as exception:
-                raise ValueError(
-                    f"required pseudo family `{pseudo_family}` is not installed. Please use `aiida-pseudo install` to"
-                    "install it."
-                ) from exception
-
-            try:
-                cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
-                pseudos = pseudo_family.get_pseudos(structure=structure)
-            except ValueError as exception:
-                raise ValueError(
-                    f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
-                ) from exception
-
+        pseudos, cutoff_wfc, cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
         parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]
-        parameters["input"]["ecutwfc"] = cutoff_wfc
+        # Set the wavefunction cutoff energy
+        if cutoff_wfc is not None:
+            parameters["input"]["ecutwfc"] = cutoff_wfc
 
         if electronic_type is ElectronicType.INSULATOR:
             parameters["input"]["smearing_method"] = "fixed"
@@ -358,7 +337,7 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     return kpoints
 
 
-def check_pseudos_family(family_name: Union[str, orm.Str]):
+def check_pseudo_family(family_name: Union[str, orm.Str]):
     """Check the existence of a pseudo family"""
     if isinstance(family_name, orm.Str):
         family_name = family_name.value
@@ -368,3 +347,47 @@ def check_pseudos_family(family_name: Union[str, orm.Str]):
         raise NotExistent(f"Pseudo family {family_name} does not exist")
     if not isinstance(group, PseudoPotentialFamily):
         raise ValueError(f"Pseudo family {family_name} is not a pseudo family")
+
+
+def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_name: str) -> tuple:
+    """
+    Set up the pseudos and cutoffs for the given structure with the given pseudo family.
+    :param structure: the structure to get the pseudos for
+    :param pseudo_family_name: the name of the pseudo family
+    :return: a tuple of pseudos, cutoff_wfc, cutoff_rho
+    """
+    # Setting up the pseudo that is a dojo family
+    pseudo_family = None
+    cutoff_wfc = None
+    cutoff_rho = None
+    # Check for existing AtomicOrbitalFamily
+    try:
+        pseudo_family = orm.QueryBuilder().append(AtomicOrbitalFamily, filters={"label": pseudo_family_name}).one()[0]
+        pseudos = pseudo_family.get_pseudos(structure=structure)
+        cutoff_wfc = next(iter(pseudos.values())).cut_off_energy  # Use the first pseudo's cut off energy
+    except exceptions.NotExistent:
+        pass
+    if pseudo_family is not None:
+        return pseudos, cutoff_wfc, cutoff_rho
+
+    # Check for pseudo_dojo family
+    try:
+        family = GroupFactory("pseudo.family.pseudo_dojo")
+        cutoffs = GroupFactory("pseudo.family.cutoffs")
+        pseudo_set = (family, cutoffs)
+        pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family_name}).one()[0]
+    except exceptions.NotExistent as exception:
+        raise ValueError(
+            f"required pseudo family `{pseudo_family}` is not installed. Please use `aiida-pseudo install` to"
+            "install it."
+        ) from exception
+
+    try:
+        cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+        pseudos = pseudo_family.get_pseudos(structure=structure)
+    except ValueError as exception:
+        raise ValueError(
+            f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
+        ) from exception
+    # TODO - support for SSSP and other families
+    return pseudos, cutoff_wfc, cutoff_rho
