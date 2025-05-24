@@ -70,8 +70,37 @@ class OptionContainer(BaseModel):
         return "\n".join(lines)
 
 
+class SettingsOptions(OptionContainer):
+    """Options for the settings input of a AbacusCalculation"""
+
+    include_bands: bool = Field(
+        description="Flag for including the bands in the output",
+        default=False,
+    )
+    include_internal_parameters: bool = Field(
+        description="Flag for including the internal parameters in the output",
+        default=False,
+    )
+    include_kpoints: bool = Field(
+        description="Flag for including the kpoints in the output",
+        default=False,
+    )
+    excluded_retrieve_list: list = Field(
+        description="List of files to be excluded from the retrieved files",
+        default=[],
+    )
+    additional_retrieve_list: list = Field(
+        description="List of files to be included in the retrieved files",
+        default=[],
+    )
+    retrieve_charge_density: bool = Field(
+        description="Flag for including the charge density in the output",
+        default=False,
+    )
+
+
 class BandOptions(OptionContainer):
-    """Options for VaspRelaxWorkChain"""
+    """Options for AbacusBandWorkChain"""
 
     symprec: float = Field(description="Precision of the symmetry determination", default=0.01)
     band_mode: str = Field(

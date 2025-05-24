@@ -1,15 +1,19 @@
 """
-Workflows
+Base workflows for Abacus calculation
 """
 
 import pathlib
+from typing import Union
 
 from aiida import orm
 from aiida.common import AttributeDict, exceptions
+from aiida.common.exceptions import NotExistent
 from aiida.common.lang import type_check
 from aiida.engine import calcfunction, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
+from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import GroupFactory
+from aiida_pseudo.groups.family import PseudoPotentialFamily
 
 from aiida_abacus.calculations import AbacusCalculation
 from aiida_abacus.common import (
@@ -51,16 +55,26 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             "kpoints_distance",
             valid_type=orm.Float,
             required=False,
+            serializer=to_aiida_type,
             help="The minimum desired distance in 1/Å between k-points in reciprocal space. The explicit k-points will "
             "be generated automatically by a calculation function based on the input structure.",
         )
         spec.input(
             "kpoints_force_parity",
             valid_type=orm.Bool,
+            serializer=to_aiida_type,
             required=False,
             help="Optional input when constructing the k-points based on a desired `kpoints_distance`. Setting this to "
             "`True` will force the k-point mesh to have an even number of points along each lattice vector except "
             "for any non-periodic directions.",
+        )
+        spec.input(
+            "pseudos_family",
+            valid_type=orm.Str,
+            serializer=to_aiida_type,
+            required=False,
+            help="Name of pseudopotential family to use for the calculation.",
+            validator=check_pseudos_family,
         )
         spec.outline(
             cls.setup,
@@ -342,3 +356,15 @@ def create_kpoints_from_distance(structure, distance, force_parity):
         kpoints.set_kpoints_mesh([nkpoints, nkpoints, nkpoints])
 
     return kpoints
+
+
+def check_pseudos_family(family_name: Union[str, orm.Str]):
+    """Check the existence of a pseudo family"""
+    if isinstance(family_name, orm.Str):
+        family_name = family_name.value
+    try:
+        group = orm.load_group(family_name)
+    except NotExistent:
+        raise NotExistent(f"Pseudo family {family_name} does not exist")
+    if not isinstance(group, PseudoPotentialFamily):
+        raise ValueError(f"Pseudo family {family_name} is not a pseudo family")

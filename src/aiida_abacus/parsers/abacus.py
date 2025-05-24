@@ -123,7 +123,7 @@ class AbacusParser(Parser):
 
     def check_include_node(self, name: str):
         """
-        Check wether to include certain output node
+        Check whether to include certain output node
         """
 
         if "settings" not in self.node.inputs:
