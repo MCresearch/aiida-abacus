@@ -1,6 +1,7 @@
 import json
 import pathlib
 import typing as t
+from itertools import chain
 
 from aiida import orm
 from aiida.common.exceptions import MultipleObjectsError, NotExistent
@@ -29,12 +30,16 @@ class AtomicOrbitalCollection(orm.Group):
         pp_path = pathlib.Path(repository) / f"{set_name}/Pseudopotential"
         orb_path = pathlib.Path(repository) / f"{set_name}/Orbitals"
         new_nodes = []
-        for path in tqdm(list(pp_path.glob("*.upf")), desc="Scanning elements"):
+        orbital_files = list(orb_path.glob("*/*.orb"))
+        print(f"Number of orbital files found: {len(orbital_files)}")
+        for path in tqdm(chain(pp_path.glob("*.upf"), pp_path.glob("*.UPF")), desc="Scanning elements"):
             element = parse_element(path.read_text())
             # Find the corresponding orbital
             for orb_folder in orb_path.glob(f"{element}_*"):
                 orb_type = orb_folder.name.split("_")[-1].lower()  # Use lowercase dzp/tdzp etc
-                for orb in orb_folder.glob("*.orb"):
+                for orb in orbital_files:
+                    if not orb.stem.startswith(element + "_"):
+                        continue
                     orb_info = parse_orb_filename(orb)
                     orb_node = AtomicOrbitalData.get_or_create(path, orb)
                     orb_element = orb_info.pop("element")
