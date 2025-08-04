@@ -7,7 +7,7 @@
 
 
 
-This is the [AiiDA](https://www.aiida.net/) plugin for [ABACUS](https://abacus.ustc.edu.cn/main.htm).
+This is the [AiiDA](https://www.aiida.net/) plugin for the ab-initio software package [ABACUS](https://abacus.ustc.edu.cn/main.htm).
 
 ## Installation
 
@@ -26,11 +26,15 @@ pip install .
 # if you want to make a change to the plugin
 ```
 
-We recommend using ABACUS LTS (v3.10). This is a long-term supported stable release. The LTS version will only receive essential bug fixes and performance optimization PRs, without introducing code modifications that might affect computational accuracy and precision, nor changes to output formats. Output format changes introduced by the rapidly iterating `develop` version may not be supported.
+We recommend using `aiida-abacus` with [ABACUS LTS (`v3.10.0`)](https://github.com/deepmodeling/abacus-develop/releases/tag/LTSv3.10.0).
+This is a Long-Term Supported stable release. The LTS version will only receive essential bug fixes and performance optimization PRs, without introducing code modifications that might affect computational accuracy and precision, nor changes to input parameter names & output formats.
+Note that output format changes introduced by the rapidly iterating `develop` branch (for example, `v3.9.0.3` and later `v3.9.0.x` released after `v3.10.0`) are currently not supported by the `aiida-abacus` parser. It is preferable to use ABACUS LTSv3.10.0 rather than `develop` release to produce data and work with `aiida-abacus`.
+
+
 
 ### Pseudopotentials
 We use the [`aiida-pseudo` plugin](https://pypi.org/project/aiida-pseudo/) to install and manage pseudopotentials.
-It is easy to install pseudopotentials by aiida-pseudo CLI:
+It is easy to install pseudopotentials by `aiida-pseudo` CLI:
 ```bash
 aiida-pseudo install pseudo-dojo -f upf -v 0.4 -x PBE -r SR -p standard 
 ```
@@ -40,13 +44,15 @@ and load the pseudopotential family installed by calling
 pseudo_family = load_group('PseudoDojo/0.4/PBE/SR/standard/upf')
 ```
 
+At least one pseudo potential family should be installed. For more information on pseudo family, please refer to [AiiDA pseudo plugin Documentation](https://aiida-pseudo.readthedocs.io/en/latest/).
+
 ## Documentation
 
 - Quick start
 
 See the `examples` directory to learn about how to run this plugin with scripts.
 
-- Get started with [AiiDA](https://aiida-tutorials.readthedocs.io/en/latest/sections/getting_started/index.html).
+- Get started with [AiiDA](https://aiida-tutorials.readthedocs.io/en/latest/sections/getting_started/index.html). It is strongly recommended that the AiiDA setup and basics tutorials should be read and followed to ensure that the environment is set up correctly, while acquiring the relevant basic knowledge and basic concepts in AiiDA & getting to learn about using `verdi` CLI/APIs.
 
 - Documentation for [ABACUS](https://abacus.deepmodeling.com/en/latest/index.html).
 
@@ -55,10 +61,10 @@ See the `examples` directory to learn about how to run this plugin with scripts.
 
 Here goes a quick demo of how to submit a calculation using this plugin:
 ```shell
-verdi daemon start     # make sure the daemon is running
+verdi daemon start      # make sure the daemon is running
 cd examples
-verdi run launch.py        # run example calculation
-verdi process list -a  # check record of calculation
+verdi run launch.py     # run example calculation
+verdi process list -a   # check record of calculation
 ```
 * Running calculations on a cluster is essentially the same, except that you need to configure the remote computer.
 - We provide a simple setup demo `remote-slurm-ssh-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource. Please configure `prepend_text` according to your remote environment if Intel® oneAPI Toolkit is used to build ABACUS.
