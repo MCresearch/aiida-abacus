@@ -16,4 +16,4 @@ wget
 gfortran
 bc
 unzip
-
+vim
