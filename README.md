@@ -2,9 +2,11 @@
 [![Coverage Status][cov-badge]][cov-link]
 [![Docs status][docs-badge]][docs-link]
 [![PyPI version][pypi-badge]][pypi-link]
+[![Binder][binder-badge]][binder-link]
 
 # aiida-abacus
 
+Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
 
 
 This is the [AiiDA](https://www.aiida.net/) plugin for [ABACUS](https://abacus.ustc.edu.cn/main.htm).
@@ -109,3 +111,5 @@ MIT
 [docs-link]: http://aiida-abacus.readthedocs.io/
 [pypi-badge]: https://badge.fury.io/py/aiida-abacus.svg
 [pypi-link]: https://badge.fury.io/py/aiida-abacus
+[binder-badge]: https://mybinder.org/badge_logo.svg
+[binder-link]: https://mybinder.org/v2/gh/MCresearch/aiida-abacus/HEAD?urlpath=%2Fdoc%2Ftree%2Fexamples%2Fbinder-example.ipynb

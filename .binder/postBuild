@@ -1,0 +1,27 @@
+set -e
+
+# Install the package and other packages
+pip install -e .
+pip install pymatgen ase-weas-widget aiida-vasp sumo
+
+# Install Clone ABACUS
+git clone https://github.com/deepmodeling/abacus-develop.git
+
+# Build
+cd abacus-develop && \
+    git checkout LTSv3.10.0 && \
+    cmake -B build -DCMAKE_INSTALL_PREFIX=`pwd` -DENABLE_DEEPKS=OFF -DENABLE_LIBXC=ON -DENABLE_LIBRI=ON -DENABLE_RAPIDJSON=ON && \
+    cmake --build build -j`nproc` && \
+    cmake --install build && \
+    rm -rf build
+
+# Initialize aiida environment
+
+verdi presto
+verdi code create core.code.installed -n -Y localhost -L abacus -D 'ABACUS LTSv3.10.0' -P abacus.abacus -X `pwd`/bin/abacus
+
+# Install pseudo-dojo potentials
+aiida-pseudo install pseudo-dojo -f upf
+
+# Fix for spurious output in the stdout - do not use the login shell
+verdi -p presto computer configure core.local localhost -n --no-use-login-shell --safe-interval 1
