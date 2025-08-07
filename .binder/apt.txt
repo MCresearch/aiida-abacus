@@ -8,6 +8,7 @@ libxc-dev
 libgtest-dev 
 libgmock-dev 
 libbenchmark-dev
+graphviz
 cmake
 git
 g++
