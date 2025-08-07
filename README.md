@@ -6,6 +6,7 @@
 
 # aiida-abacus
 
+Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
 
 
 This is the [AiiDA](https://www.aiida.net/) plugin for [ABACUS](https://abacus.ustc.edu.cn/main.htm).
