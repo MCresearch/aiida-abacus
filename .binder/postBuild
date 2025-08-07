@@ -1,7 +1,8 @@
 set -e
 
-# Install the package
-pip install -e .[tests]
+# Install the package and other packages
+pip install -e .
+pip install pymatgen ase-weas-widget aiida-vasp sumo
 
 # Install Clone ABACUS
 git clone https://github.com/deepmodeling/abacus-develop.git
