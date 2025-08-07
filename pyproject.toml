@@ -63,6 +63,7 @@ Source = "https://github.com/MCresearch/aiida-abacus"
 [project.entry-points."aiida.workflows"]
 "abacus.base" = "aiida_abacus.workflows.base:AbacusBaseWorkChain"
 "abacus.relax" = "aiida_abacus.workflows.relax:AbacusRelaxWorkChain"
+"abacus.band" = "aiida_abacus.workflows.band:AbacusBandWorkChain"
 
 [project.entry-points."aiida.parsers"]
 "abacus.abacus" = "aiida_abacus.parsers:AbacusParser"
