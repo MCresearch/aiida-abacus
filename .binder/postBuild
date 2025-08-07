@@ -18,7 +18,7 @@ cd abacus-develop && \
 # Initialize aiida environment
 
 verdi presto
-verdi code setup -n -Y localhost -L abacus -D 'ABACUS LTSv3.10.0' -P abacus.abacus --remote-abs-path `pwd`/bin/abacus --on-computer
+verdi code create core.code.installed -n -Y localhost -L abacus -D 'ABACUS LTSv3.10.0' -P abacus.abacus -X `pwd`/bin/abacus
 
 # Install pseudo-dojo potentials
 aiida-pseudo install pseudo-dojo -f upf
