@@ -22,6 +22,5 @@ verdi code setup -n -Y localhost -L abacus -D 'ABACUS LTSv3.10.0' -P abacus.abac
 # Install pseudo-dojo potentials
 aiida-pseudo install pseudo-dojo -f upf
 
-# Fix for spurious output in the stdout
-
-sed -i 's/echo/#echo/g' /etc/profile.d/activate-conda.sh 
+# Fix for spurious output in the stdout - do not use the login shell
+verdi -p presto computer configure core.local localhost -n --no-use-login-shell --safe-interval 10
