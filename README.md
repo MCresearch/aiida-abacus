@@ -220,4 +220,4 @@ MIT
 [pypi-badge]: https://mybinder.org/badge_logo.svg
 [pypi-link]: https://badge.fury.io/py/aiida-abacus
 [binder-badge]: https://mybinder.org/badge_logo.svg
-[binder-link]: https://mybinder.org/v2/gh/https://mybinder.org/v2/gh/MCresearch/aiida-abacus/HEAD 
+[binder-link]: https://mybinder.org/v2/gh/MCresearch/aiida-abacus/HEAD?urlpath=%2Fdoc%2Ftree%2Fexamples%2Fbinder-example.ipynb
