@@ -22,7 +22,7 @@ keywords = ["aiida", "plugin"]
 requires-python = ">=3.10"
 dependencies = [
     "aiida-core>=2.5,<3",
-    'aiida-pseudo~=1.1',
+    "aiida-pseudo~=1.7.2",
     "voluptuous",
     "ase",
     "pydantic",
@@ -38,13 +38,14 @@ docs = [
     "sphinx~=6.2.1",
     "sphinxcontrib-contentui",
     "furo",
-    "markupsafe<2.1",
-    'sphinx-autoapi~=3.0.0',
+    "markupsafe>=2.1.1",
     'sphinx-copybutton~=0.5.2',
     'sphinx-book-theme~=1.0.1',
     'sphinx-click~=4.4.0',
     'sphinx-design~=0.4.1',
     'sphinxcontrib-details-directive~=0.1.0',
+    'sphinx-autoapi~=3.0.0',
+    'myst-parser~=3.0.0',
 ]
 
 [project.urls]
