@@ -185,7 +185,7 @@ kpoints.set_kpoints_mesh([6, 6, 4], offset=[0, 0, 0.5])  # default cartesian=Fal
 
 ###
 # prepare pseudos with aiida-pseudo
-pseudo_family = load_group("SSSP/1.1/PBE/efficiency")
+pseudo_family = load_group("PseudoDojo/0.4/PBE/SR/standard/upf")
 builder.pseudos = pseudo_family.get_pseudos(structure=structure)
 
 
