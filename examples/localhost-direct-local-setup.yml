@@ -1,0 +1,13 @@
+append_text: ''
+default_memory_per_machine: 40960000 # 40 GB for example
+description: my local computer
+hostname: "localhost" # your hostname
+label: "localhost" # your label
+mpiprocs_per_machine: 4
+mpirun_command: mpirun -np {tot_num_mpiprocs}
+prepend_text: '. /opt/intel/oneapi/2024.1/oneapi-vars.sh' # for example, load the intel oneapi environment
+scheduler: core.direct  # for directly running on the login node, or core.slurm for using slurm
+shebang: '#!/bin/bash'
+transport: core.local # or core.ssh for remote machine
+use_double_quotes: false
+work_dir: /home/<username>/aiida/ # your working directory
