@@ -19,17 +19,19 @@ tutorials/index
 :caption: How to
 
 howto/check/index
+howto/calculations/index
+howto/workflows/index
 
 ```
 <!-- howto/calculations/index
 howto/workflows/index -->
 
-<!-- ```{toctree}
+```{toctree}
 :hidden: true
 :caption: Developer Guide
 
 developer_guide/index
-``` -->
+```
 
 <!-- ```{toctree}
 :hidden: true
@@ -44,6 +46,13 @@ topics/workflows/index
 :caption: Reference
 
 ``` -->
+
+```{toctree}
+:hidden: true
+:caption: Reference
+reference/api/auto/aiida_abacus/index
+```
+
 <!-- ```{toctree}
 :hidden: true
 :caption: Reference
