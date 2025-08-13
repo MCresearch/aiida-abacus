@@ -53,7 +53,7 @@ myst_enable_extensions = [
 ]
 
 intersphinx_mapping = {
-    # "python": ("https://docs.python.org/3", None),
+    "python": ("https://docs.python.org/3", None),
     "aiida": ("https://aiida.readthedocs.io/projects/aiida-core/en/latest", None),
     "aiida_pseudo": ("https://aiida-pseudo.readthedocs.io/en/latest/", None),
 }
