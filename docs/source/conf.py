@@ -124,12 +124,23 @@ pygments_style = "sphinx"
 # # html_title = f"aiida-abacus v{release}"
 # html_theme_options = {}
 html_theme = "sphinx_book_theme"
+html_theme_options = {
+    "repository_url": "https://github.com/aiida-abacus/aiida-abacus",
+    "use_edit_page_button": True,
+    "navigation_with_keys": False,
+    "logo": {
+        "text": "AiiDA ABACUS",  # 顶部文字
+        "image_light": "images/AiiDA_transparent_logo.png",
+        "image_dark": "images/AiiDA_transparent_logo.png",
+    },
+}
 
 
 # Add any paths that contain custom themes here, relative to this directory.
 # ~ html_theme_path = ["."]
 
 # html_static_path = ["_static"]
+html_static_path = ["images"]
 # html_css_files = ["aiida-abacus.css"]
 
 # The name of an image file (within the static path) to use as favicon of the
