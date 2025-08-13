@@ -11,6 +11,7 @@
 # serve to show the default.
 
 import pathlib
+import sys
 import time
 
 from aiida import load_profile
@@ -52,7 +53,7 @@ myst_enable_extensions = [
 ]
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
+    # "python": ("https://docs.python.org/3", None),
     "aiida": ("https://aiida.readthedocs.io/projects/aiida-core/en/latest", None),
     "aiida_pseudo": ("https://aiida-pseudo.readthedocs.io/en/latest/", None),
 }
@@ -232,7 +233,11 @@ nitpick_ignore = [
 filepath_docs = pathlib.Path(__file__).parent.parent
 filepath_src = filepath_docs.parent / "src"
 autoapi_type = "python"
-autoapi_dirs = [filepath_src]
+# autoapi_dirs = [filepath_src]
+root = pathlib.Path(__file__).parent.parent.parent  # 仓库根
+sys.path.insert(0, str(root / "src"))
+autoapi_dirs = [str(root / "src")]
+
 autoapi_ignore = [filepath_src / "abacus" / "*cli*"]
 autoapi_root = str(filepath_docs / "source" / "reference" / "api" / "auto")
 autoapi_keep_files = True
