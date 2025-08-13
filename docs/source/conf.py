@@ -32,19 +32,31 @@ load_profile(temp_profile, allow_switch=True)
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
+    "sphinx_copybutton",
+    "sphinx_click.ext",
+    "sphinx_design",
     "sphinxcontrib.contentui",
     "aiida.sphinxext",
     "autoapi.extension",
 ]
 
+myst_enable_extensions = [
+    "colon_fence",
+    "substitution",
+    "html_admonition",
+]
+
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "aiida": ("https://aiida.readthedocs.io/projects/aiida-core/en/latest", None),
+    "aiida_pseudo": ("https://aiida-pseudo.readthedocs.io/en/latest/", None),
 }
+
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -107,13 +119,18 @@ pygments_style = "sphinx"
 
 # -- Options for HTML output ----------------------------------------------
 
-html_theme = "furo"
-html_logo = "images/AiiDA_transparent_logo.png"
-# html_title = f"aiida-abacus v{release}"
-html_theme_options = {}
+# html_theme = "furo"
+# html_logo = "images/AiiDA_transparent_logo.png"
+# # html_title = f"aiida-abacus v{release}"
+# html_theme_options = {}
+html_theme = "sphinx_book_theme"
+
 
 # Add any paths that contain custom themes here, relative to this directory.
 # ~ html_theme_path = ["."]
+
+# html_static_path = ["_static"]
+# html_css_files = ["aiida-abacus.css"]
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -138,8 +155,24 @@ html_theme_options = {}
 # typographically correct entities.
 # html_use_smartypants = True
 
+html_context = {
+    "github_user": "aiida-abacus",
+    "github_repo": "aiida-abacus",
+    "github_version": "main",
+    "doc_path": "docs/source",
+    "default_mode": "light",
+}
+
 # Custom sidebar templates, maps document names to template names.
 # html_sidebars = {}
+html_sidebars = {
+    "**": [
+        "navbar-logo.html",
+        "navbar-icon-links.html",
+        "search-field.html",
+        "sbt-sidebar-nav.html",
+    ]
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -193,3 +226,9 @@ autoapi_ignore = [filepath_src / "abacus" / "*cli*"]
 autoapi_root = str(filepath_docs / "source" / "reference" / "api" / "auto")
 autoapi_keep_files = True
 autoapi_add_toctree_entry = False
+
+
+# Settings for the `sphinx_copybutton` extension
+copybutton_selector = "div:not(.no-copy)>div.highlight pre"
+copybutton_prompt_text = r">>> |\.\.\. |(?:\(.*\) )?\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
+copybutton_prompt_is_regexp = True
