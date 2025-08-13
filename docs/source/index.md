@@ -14,20 +14,22 @@ installation/index
 tutorials/index
 ```
 
-<!-- ```{toctree}
+```{toctree}
 :hidden: true
 :caption: How to
 
-howto/calculations/index
-howto/workflows/index
-``` -->
+howto/check/index
 
-```{toctree}
+```
+<!-- howto/calculations/index
+howto/workflows/index -->
+
+<!-- ```{toctree}
 :hidden: true
 :caption: Developer Guide
 
 developer_guide/index
-```
+``` -->
 
 <!-- ```{toctree}
 :hidden: true
