@@ -3,6 +3,7 @@
 
 import numpy as np
 from aiida import engine, orm
+from aiida.common.exceptions import NotExistent
 from aiida.orm import Dict, KpointsData, StructureData, load_group
 from ase.build import bulk
 
@@ -10,19 +11,17 @@ from ase.build import bulk
 # set up code
 computer = orm.load_computer("localhost")
 
-# try:
-#     code = orm.load_code('abacus@localhost')
-# except NotExistent:
-#     # Setting up code via python API (or use "verdi code setup")
-#     code = orm.InstalledCode(
-#         label='abacus', computer=computer,
-#         filepath_executable='abacus',
-#         default_calc_job_plugin='abacus'
-#     )
+try:
+    code = orm.load_code("abacus-3.10.0@localhost")
+except NotExistent:
+    # Setting up code via python API (or use "verdi code setup")
+    code = orm.InstalledCode(
+        label="abacus-3.10.0", computer=computer, filepath_executable="abacus", default_calc_job_plugin="abacus.abacus"
+    )
 
-code = orm.InstalledCode(
-    label="abacus", computer=computer, filepath_executable="abacus", default_calc_job_plugin="abacus.abacus"
-)
+# code = orm.InstalledCode(
+#     label="abacus-3.10.0", computer=computer, filepath_executable="abacus", default_calc_job_plugin="abacus.abacus"
+# )
 
 
 builder = code.get_builder()
