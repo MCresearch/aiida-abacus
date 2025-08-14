@@ -42,6 +42,7 @@ extensions = [
     "sphinx_click.ext",
     "sphinx_design",
     "sphinxcontrib.contentui",
+    "sphinxemoji.sphinxemoji",
     "aiida.sphinxext",
     "autoapi.extension",
 ]
@@ -248,3 +249,5 @@ autoapi_add_toctree_entry = False
 copybutton_selector = "div:not(.no-copy)>div.highlight pre"
 copybutton_prompt_text = r">>> |\.\.\. |(?:\(.*\) )?\$ |In \[\d*\]: | {2,5}\.\.\.: | {5,8}: "
 copybutton_prompt_is_regexp = True
+
+sphinxemoji_style = "twemoji"
