@@ -83,19 +83,16 @@ mixing_type             broyden
 mixing_beta             0.7
 mixing_gg0              0
 """
-# input_parameters = {
-#     'calculation': 'scf',
-# }
 input_parameters = {
     # pseudo_dir will be set by the plugin based on the pseudos
-    # 'symmetry': 1,
+    "symmetry": 1,
     "basis_type": "pw",
     "ecutwfc": 100,
-    "scf_thr": 1e-4,  # 1e-7,
-    # 'scf_nmax': 100,
+    "scf_thr": 1e-7,
+    "scf_nmax": 100,
     "device": "cpu",
-    # 'ks_solver': 'dav_subspace',
-    # 'precision': 'double',
+    "ks_solver": "dav_subspace",
+    "precision": "double",
 }
 
 
@@ -173,9 +170,6 @@ stru_settings = {
 }
 
 # KPT
-# KpointsData = DataFactory('core.array.kpoints')
-# The entry point `array.kpoints` is deprecated.
-# Please replace it with `core.array.kpoints`. (this will be removed in v3)
 kpoints = KpointsData()
 kpoints.set_kpoints_mesh([6, 6, 4], offset=[0, 0, 0.5])  # default cartesian=False
 #! note that according to aiida.orm.nodes.data.array.kpoints.KpointsData:
