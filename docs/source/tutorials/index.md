@@ -1,8 +1,20 @@
 # Tutorials
 
+:::{important}
+Before we start the tour, make sure that all the environments are ready:
+- [aiida-core](https://aiida.readthedocs.io/projects/aiida-core/en/stable/installation/guide_quick.html) configured.
+
+- `aiida-abacus` installed. (See [Installation guide](#installation-install))
+
+- [`aiida-pseudo`](https://aiida-pseudo.readthedocs.io/en/latest/) package and `pseudo-dojo` family installed.
+
+- `abacus` executable ready.
+
+:::
+
 This page show how to run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured before.
 
-1. First please ensure your [AiiDA](https://www.aiida.net/) environment is properly configured. Configure the computer and code.
+1. First please ensure your [AiiDA](https://www.aiida.net/) environment is properly configured. A computer and the corresponding code should be available.
 
 2. Activate the AiiDA virtual environment.
 , for example run `conda activate aiida-env` or suchlike.

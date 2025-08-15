@@ -1,3 +1,5 @@
+(installation-install)=
+
 # Installation
 
 This guide walks you through installing **aiida-abacus**, configuring AiiDA, and setting up everything you need to run ABACUS calculations.
