@@ -114,7 +114,7 @@ You may want to use the pseudo potential family later in the script and the corr
 pseudo_family = load_group("PseudoDojo/0.4/PBE/SR/standard/upf")
 ```
 
-See [aiida-pseudo](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for a complete list of 
+See [aiida-pseudo](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for a complete list of pesudo potential families.
 
 ## Note
 
