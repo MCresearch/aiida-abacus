@@ -1,26 +1,22 @@
 # Tutorials
 
-:::{important}
-Before we start the tour, make sure that all the environments are ready:
-- [aiida-core](https://aiida.readthedocs.io/projects/aiida-core/en/stable/installation/guide_quick.html) configured.
+This page show how to run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured.
 
-- `aiida-abacus` installed. (See [Installation guide](#installation-install))
+1. First we will configure the [AiiDA](https://www.aiida.net/) environment. A computer and the corresponding code will be set available.
 
-- [`aiida-pseudo`](https://aiida-pseudo.readthedocs.io/en/latest/) package and `pseudo-dojo` family installed.
+We provide an easy installation and configuration guide here.
 
-- `abacus` executable ready.
 
-:::
 
-This page show how to run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured before.
 
-1. First please ensure your [AiiDA](https://www.aiida.net/) environment is properly configured. A computer and the corresponding code should be available.
+
+See [AiiDA installation guide](https://aiida.readthedocs.io/projects/aiida-core/en/latest/installation/index.html) for more information.
 
 2. Activate the AiiDA virtual environment.
 , for example run `conda activate aiida-env` or suchlike.
-<!-- ```console
-$ conda activate aiida
-``` -->
+```console
+$ conda activate aiida-env
+```
 
 3. Start the daemon.
     ```console
@@ -37,18 +33,63 @@ $ conda activate aiida
     Use `verdi daemon [incr | decr] [num]` to increase / decrease the number of workers
     ```
 
-4. Check the code and install pseudopotential families used in the calculation.
+4. Install the code and pseudopotential families used in the calculation.
 
     We will use an ABACUS LTSv3.10.0 code at locolhost as example.
-    ```console
-    $ verdi code test abacus-3.10.0@locolhost
-    ```
+    
+    1. First install ABACUS and configure the code by AiiDA.
+    We provide a simple installation and configure script on localhost here. Please consult [ABACUS Easy Installation](https://abacus.deepmodeling.com/en/latest/quick_start/easy_install.html) for details.
 
-    And the calculation uses `PseudoDojo/0.4/PBE/SR/standard/upf`.
+
+    :::{note}
+    Check installed code by
+
+    ```console
+    $ verdi code list
+    Full label                   Pk  Entry point
+    -----------------------  ------  -------------------
+    abacus@localhost              2  core.code.installed
+    $ verdi code test abacus@localhost
+    Success: all tests succeeded.
+    ```
+    :::
+
+    2. Then And the calculation uses `PseudoDojo/0.4/PBE/SR/standard/upf`.
 
     ```console
     $ aiida-pseudo install pseudo-dojo -f upf -v 0.4 -x PBE -r SR -p standard
     ```
+
+    :::{note}
+    Check installed pseudos by  
+
+    ```console
+    $ verdi group list -a
+      PK  Label                                                                                Type string                User
+    ----  -----------------------------------------------------------------------------------  -------------------------  ---------------
+    1  PseudoDojo/0.4/PBE/SR/standard/upf                                                   pseudo.family.pseudo_dojo  aiida@localhost
+    ```
+    :::
+
+:::{important}
+Make sure that all the environments are ready here before we start the calculation:
+- [aiida-core](https://aiida.readthedocs.io/projects/aiida-core/en/stable/installation/guide_quick.html) configured.
+
+- `aiida-abacus` installed. (See [Installation guide](#installation-install))
+
+- [`aiida-pseudo`](https://aiida-pseudo.readthedocs.io/en/latest/) package and `pseudo-dojo` family installed.
+
+- `abacus` executable ready.
+
+Please activate your AiiDA environment and run the checks:
+
+```console
+$ verdi status
+$ verdi plugin list aiida.calculations abacus.abacus
+$ aiida-pseudo list -F pseudo.family.pseudo_dojo
+$ abacus -v # should give: ABACUS version v3.10.0
+```
+:::
 
 5. Now run `examples/launch.py`. It will submit the ABACUS calculation.
     ```console

@@ -6,10 +6,15 @@
 
 # aiida-abacus
 
-Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
 
 
 This is the [AiiDA](https://www.aiida.net/) plugin for the ab-initio software package [ABACUS](https://abacus.ustc.edu.cn/main.htm).
+
+## Quick start
+
+Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
+
+See [Tutorials](https://aiida-abacus.readthedocs.io/en/latest/tutorials/index.html) for a quick installation locally.
 
 ## Installation
 

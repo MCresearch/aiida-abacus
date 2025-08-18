@@ -13,6 +13,7 @@ Before you begin, ensure you have:
 1. **Python 3.10+**  
 2. **AiiDA-core ≥ 2.0** (including a configured profile)  
    ➜ [Follow the AiiDA-core installation guide](https://aiida-core.readthedocs.io/en/latest/intro/get_started.html) if you have not done so.
+   ➜ A virtual environment of Python is preferred, like [Conda](https://anaconda.org/anaconda/conda).
 
 3. **ABACUS** executable installed on every computer you plan to use (local or remote).  
    ➜ [Official ABACUS installation docs](https://abacus.deepmodeling.com/en/latest/quick_start/easy_install.html)
