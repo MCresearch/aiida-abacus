@@ -1,21 +1,91 @@
 # Tutorials
 
-This page show how to run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured.
+This page show how to work with AiiDA and run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured.
 
 1. First we will configure the [AiiDA](https://www.aiida.net/) environment. A computer and the corresponding code will be set available.
 
-We provide an easy installation and configuration guide here.
+    We provide an easy installation and configuration guide for **Ubuntu** local calculation here. You can follow the guide or skip if some steps are already done.
 
+    :::{hint}
+    ### Quick one-command install
+    If you simply want everything ready on **Ubuntu/WSL**, run once:
+    ```console
+    $ sudo apt update
+    $ xargs -a .binder/apt.txt sudo apt install -y      # system deps
+    $ conda create -n acwf python=3.10 -y && conda activate acwf
+    $ bash .binder/postBuild                            # 5-stage automatic setup            
+    ```
+    The script performs the following stages — each can also be executed manually if you prefer full control.
+    :::
 
+    0. It is recommended to use a virtual environment.
+    ```console
+    $ conda create -n aiida python=3.10 -y
+    $ conda activate aiida
+    ```
+
+    1. Install system dependencies (Ubuntu)
+    ```console
+    $ sudo apt update
+    $ xargs -a .binder/apt.txt sudo apt install -y      # system deps
+    ```
+
+    2. Install Python packages.
+    ```console
+    $ pip install -e .
+    $ pip install pymatgen ase-weas-widget aiida-vasp sumo
+    ```
+
+    3. Build ABACUS LTSv3.10.0.
+    ```bash
+    $ git clone https://github.com/deepmodeling/abacus-develop.git
+    $ cd abacus-develop
+    $ git checkout LTSv3.10.0
+    $ cmake -B build \
+        -DCMAKE_INSTALL_PREFIX=$PWD \
+        -DENABLE_DEEPKS=OFF \
+        -DENABLE_LIBXC=ON \
+        -DENABLE_LIBRI=ON \
+        -DENABLE_RAPIDJSON=ON
+        cmake --build build -j$(nproc)
+        cmake --install build
+    ```
+    This compiles ABACUS with LibXC and LibRI support and places the binary at `abacus-develop/bin/abacus`.
+    You can use your local ABACUS directly.
+
+    4. Initialize AiiDA
+    ```console
+    $ verdi presto
+    ```
+    Creates a lightweight AiiDA profile using SQLite and localhost (no RabbitMQ required for the tutorial).
+
+    5. Register the ABACUS code
+    ```bash
+    $ verdi code create core.code.installed -n \
+        -Y localhost -L abacus \
+        -D "ABACUS LTSv3.10.0" -P abacus.abacus \
+        -X $(pwd)/abacus-develop/bin/abacus
+    ```
+    Adds the freshly built executable to AiiDA as `abacus@localhost`.
+
+    6. Install pseudopotentials and finalize
+    ```bash
+    $ aiida-pseudo install pseudo-dojo -f upf
+    $ verdi -p presto computer configure core.local localhost \
+        -n --no-use-login-shell --safe-interval 1
+    ```
+    Downloads the **Pseudo-Dojo v0.4 PBE SR standard UPF** family and configures the localhost computer to suppress login-shell artifacts.
 
 
 
 See [AiiDA installation guide](https://aiida.readthedocs.io/projects/aiida-core/en/latest/installation/index.html) for more information.
 
+After these steps, we're ready to submit our first calculation.
+
 2. Activate the AiiDA virtual environment.
-, for example run `conda activate aiida-env` or suchlike.
+
 ```console
-$ conda activate aiida-env
+$ conda activate aiida
 ```
 
 3. Start the daemon.
@@ -33,14 +103,8 @@ $ conda activate aiida-env
     Use `verdi daemon [incr | decr] [num]` to increase / decrease the number of workers
     ```
 
-4. Install the code and pseudopotential families used in the calculation.
-
-    We will use an ABACUS LTSv3.10.0 code at locolhost as example.
+4. Check the code and pseudopotential families used in the calculation.
     
-    1. First install ABACUS and configure the code by AiiDA.
-    We provide a simple installation and configure script on localhost here. Please consult [ABACUS Easy Installation](https://abacus.deepmodeling.com/en/latest/quick_start/easy_install.html) for details.
-
-
     :::{note}
     Check installed code by
 
@@ -52,15 +116,7 @@ $ conda activate aiida-env
     $ verdi code test abacus@localhost
     Success: all tests succeeded.
     ```
-    :::
 
-    2. Then And the calculation uses `PseudoDojo/0.4/PBE/SR/standard/upf`.
-
-    ```console
-    $ aiida-pseudo install pseudo-dojo -f upf -v 0.4 -x PBE -r SR -p standard
-    ```
-
-    :::{note}
     Check installed pseudos by  
 
     ```console
@@ -69,9 +125,10 @@ $ conda activate aiida-env
     ----  -----------------------------------------------------------------------------------  -------------------------  ---------------
     1  PseudoDojo/0.4/PBE/SR/standard/upf                                                   pseudo.family.pseudo_dojo  aiida@localhost
     ```
+
     :::
 
-:::{important}
+<!-- :::{important}
 Make sure that all the environments are ready here before we start the calculation:
 - [aiida-core](https://aiida.readthedocs.io/projects/aiida-core/en/stable/installation/guide_quick.html) configured.
 
@@ -89,7 +146,7 @@ $ verdi plugin list aiida.calculations abacus.abacus
 $ aiida-pseudo list -F pseudo.family.pseudo_dojo
 $ abacus -v # should give: ABACUS version v3.10.0
 ```
-:::
+::: -->
 
 5. Now run `examples/launch.py`. It will submit the ABACUS calculation.
     ```console
