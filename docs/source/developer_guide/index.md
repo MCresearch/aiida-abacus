@@ -2,7 +2,7 @@
 
 Our `aiida-abacus` plugin and doc page is under construction.
 
-We warmly welcome contributions to aiida-abacus. :slightly_smiling_face:
+We warmly welcome contributions to aiida-abacus. |:slightly_smiling_face:|
 
 Please open an issue in [our repo](https://github.com/MCresearch/aiida-abacus) if you want to do something.
 
@@ -15,3 +15,8 @@ List of useful information:
 - [ABACUS Github Pages](https://mcresearch.github.io/abacus-user-guide/)
 - [ABACUS INPUT List](https://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html)
 - ABACUS pseudopotentials/orbitals: [APNS ABACUS Pseudopotential-NAO Square](https://aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1%253Apre-release&id=326)
+
+Todo list:
+[] All-in-one tutorials
+[] Config demo for toolchain-built ABACUS
+[] Scripts for APNS import
