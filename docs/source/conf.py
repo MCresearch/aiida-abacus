@@ -48,6 +48,7 @@ extensions = [
 ]
 
 myst_enable_extensions = [
+    "tasklist",
     "colon_fence",
     "substitution",
     "html_admonition",
