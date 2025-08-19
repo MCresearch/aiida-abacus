@@ -17,6 +17,6 @@ List of useful information:
 - ABACUS pseudopotentials/orbitals: [APNS ABACUS Pseudopotential-NAO Square](https://aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1%253Apre-release&id=326)
 
 Todo list:
-[] All-in-one tutorials
-[] Config demo for toolchain-built ABACUS
-[] Scripts for APNS import
+- [x] One-stop tutorials
+- [ ] Config demo for toolchain-built ABACUS
+- [ ] Scripts for APNS pseudo & orbital family import

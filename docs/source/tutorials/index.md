@@ -166,9 +166,9 @@ ABACUS version v3.10.0
 ```
 ::: -->
 
-5. Now run `examples/launch.py`. It will submit the ABACUS calculation.
+5. Now let us run an example script. It will submit the ABACUS calculation.
     ```console
-    $ verdi run examples/launch.py
+    $ verdi run examples/example_pw_Si2.py
     ```
 
 6. Inspect the calculation progress:
@@ -179,7 +179,7 @@ ABACUS version v3.10.0
     233  5m ago     AbacusCalculation       ⏹ Finished [0]
     ```
 
-7. Now let's check the report for this process:
+7. Now let's check the report for this process: (Replace 233 with the PK shown in the previous step and run)
     ```console
     $ verdi process report 233
     ```
