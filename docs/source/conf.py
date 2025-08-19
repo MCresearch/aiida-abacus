@@ -128,6 +128,7 @@ pygments_style = "sphinx"
 html_theme = "sphinx_book_theme"
 html_theme_options = {
     "repository_url": "https://github.com/aiida-abacus/aiida-abacus",
+    # 'github_url': "https://github.com/aiida-abacus/aiida-abacus",
     "use_edit_page_button": True,
     "navigation_with_keys": False,
     "logo": {
@@ -149,6 +150,7 @@ html_static_path = ["images"]
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
 # html_favicon = "images/favicon.ico"
+html_favicon = "https://assets.readthedocs.org/static/images/favicon.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
