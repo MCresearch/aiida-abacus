@@ -63,6 +63,27 @@ results, node = engine.run.get_node(builder, parameters=parameters)
 This is structured data in Python and can be easily retrieved and post-processed in the scripts in a _key-value_ approach.
 ```python
 misc = results["misc"].get_dict()
+print(f"Miscellaneous: {misc}")
+print(f"Total energy is: {misc['total_energy']} eV")
+```
+Output:
+```
+Miscellaneous: {'all_forces': [], 'all_stress': [], 'final_forces': None, 'final_stress': None, 'number_of_bands': 14, 'fermi_level': 6.7743122402, 'total_energy': '-230.0707770781960'}
+Total energy is: -230.0707770781960 eV
+```
+
+Retrieved files can also be accessed in this way.
+```python
+retrieved = results["retrieved"]
+```
+Output:
+```
+Retrieved files: ['OUT.aiida', '_scheduler-stderr.txt', '_scheduler-stdout.txt', 'abacus_output']
+```
+Raw file content can be dumped by
+```python
+print(results['retrieved'].base.repository.get_object_content("abacus_output"))
+print(results['retrieved'].base.repository.get_object_content("OUT.aiida/running_scf.log"))
 ```
 
 ## Excepted?
