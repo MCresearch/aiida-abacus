@@ -6,15 +6,16 @@
 
 # aiida-abacus
 
-
-
 This is the [AiiDA](https://www.aiida.net/) plugin for the ab-initio software package [ABACUS](https://abacus.ustc.edu.cn/main.htm).
 
 ## Quick start
 
-Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
+Try this plugin with a live JupyterLab server with Binder!
 
-See [Tutorials](https://aiida-abacus.readthedocs.io/en/latest/tutorials/index.html) for a quick installation locally.
+Click the Binder badge [![Binder][binder-badge]][binder-link] to launch a **zero-install** JupyterLab.  
+In two minutes you’ll have AiiDA + ABACUS fully set-up—complete with ready-to-run notebooks that let you submit calculations, track provenance, and visualize results right in your browser.
+
+See [Tutorials](https://aiida-abacus.readthedocs.io/en/latest/tutorials/index.html) for installation locally.
 
 ## Installation
 
