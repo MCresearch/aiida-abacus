@@ -5,12 +5,16 @@
 This guide walks you through installing **aiida-abacus**, configuring AiiDA, and setting up everything you need to run ABACUS calculations.
 
 ## Quick start
-
-Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
-
-For a one-stop environment setup and a quick start with running calculations, please see the [Tutorials](#tutorials-quick-start).
-
+:::{attention}
+**No time to install?**  
+Click the Binder badge [![Binder][binder-badge]][binder-link] to launch a **zero-install** JupyterLab.  
+In two minutes you’ll have AiiDA + ABACUS fully set-up—complete with ready-to-run notebooks that let you submit calculations, track provenance, and visualize results right in your browser.
+:::
 ---
+
+
+For a one-stop local environment setup and a quick start with running calculations, please see the [Tutorials](#tutorials-quick-start).
+
 
 ## Requirements
 
