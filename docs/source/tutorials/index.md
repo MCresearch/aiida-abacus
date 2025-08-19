@@ -4,6 +4,14 @@ This page show how to work with AiiDA and run a simple ABACUS calculation using 
 
 (tutorials-quick-start)=
 
+## Quick start
+
+Try this plugin online with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
+
+## Run locally
+
+To start locally:
+
 1. First we will configure the [AiiDA](https://www.aiida.net/) environment. A computer and the corresponding code will be set available.
 
     We provide an easy installation and configuration guide for a **local ABACUS LTSv3.10.0/Ubuntu** calculation with `Pseudo-Dojo v0.4` here. You can follow the guide or skip if some steps are already done. Adapt the configuration to suit your tastes.
@@ -180,3 +188,6 @@ AiiDA supports many different schedulers apart from Direct Execution.
 If you are using a Batch Job Scheduler like [SLURM](https://slurm.schedmd.com/) to manage the job queues and execution on a compute resource, see supported
 [Batch Job Schedulers](https://aiida.readthedocs.io/projects/aiida-core/en/latest/topics/schedulers.html).
 :::
+
+[binder-badge]: https://mybinder.org/badge_logo.svg
+[binder-link]: https://mybinder.org/v2/gh/MCresearch/aiida-abacus/HEAD?urlpath=%2Fdoc%2Ftree%2Fexamples%2Fbinder-example.ipynb
