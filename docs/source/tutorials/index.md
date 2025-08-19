@@ -2,17 +2,19 @@
 
 This page show how to work with AiiDA and run a simple ABACUS calculation using the computer, code, and pseudo potential family we configured.
 
+(tutorials-quick-start)=
+
 1. First we will configure the [AiiDA](https://www.aiida.net/) environment. A computer and the corresponding code will be set available.
 
-    We provide an easy installation and configuration guide for **Ubuntu** local calculation here. You can follow the guide or skip if some steps are already done.
+    We provide an easy installation and configuration guide for a **local ABACUS LTSv3.10.0/Ubuntu** calculation with `Pseudo-Dojo v0.4` here. You can follow the guide or skip if some steps are already done. Adapt the configuration to suit your tastes.
 
-    :::{hint}
+    :::{tip}
     ### Quick one-command install
     If you simply want everything ready on **Ubuntu/WSL**, run once:
     ```console
     $ sudo apt update
     $ xargs -a .binder/apt.txt sudo apt install -y      # system deps
-    $ conda create -n acwf python=3.10 -y && conda activate acwf
+    $ conda create -n aiida python=3.10 -y && conda activate aiida
     $ bash .binder/postBuild                            # 5-stage automatic setup            
     ```
     The script performs the following stages — each can also be executed manually if you prefer full control.
@@ -36,16 +38,13 @@ This page show how to work with AiiDA and run a simple ABACUS calculation using 
     $ pip install pymatgen ase-weas-widget aiida-vasp sumo
     ```
 
-    3. Build ABACUS LTSv3.10.0.
+    3. Build ABACUS **LTSv3.10.0**.
     ```bash
     $ git clone https://github.com/deepmodeling/abacus-develop.git
     $ cd abacus-develop
     $ git checkout LTSv3.10.0
     $ cmake -B build \
         -DCMAKE_INSTALL_PREFIX=$PWD \
-        -DENABLE_DEEPKS=OFF \
-        -DENABLE_LIBXC=ON \
-        -DENABLE_LIBRI=ON \
         -DENABLE_RAPIDJSON=ON
         cmake --build build -j$(nproc)
         cmake --install build
@@ -77,10 +76,12 @@ This page show how to work with AiiDA and run a simple ABACUS calculation using 
     Downloads the **Pseudo-Dojo v0.4 PBE SR standard UPF** family and configures the localhost computer to suppress login-shell artifacts.
 
 
+See [Installation — AiiDA documentation](https://aiida.readthedocs.io/projects/aiida-core/en/latest/installation/index.html) for a complete installation guide.
 
-See [AiiDA installation guide](https://aiida.readthedocs.io/projects/aiida-core/en/latest/installation/index.html) for more information.
 
 After these steps, we're ready to submit our first calculation.
+
+---
 
 2. Activate the AiiDA virtual environment.
 
@@ -109,6 +110,8 @@ $ conda activate aiida
     Check installed code by
 
     ```console
+    $ abacus -v
+    ABACUS version v3.10.0
     $ verdi code list
     Full label                   Pk  Entry point
     -----------------------  ------  -------------------
@@ -139,12 +142,15 @@ Make sure that all the environments are ready here before we start the calculati
 - `abacus` executable ready.
 
 Please activate your AiiDA environment and run the checks:
-
 ```console
 $ verdi status
 $ verdi plugin list aiida.calculations abacus.abacus
 $ aiida-pseudo list -F pseudo.family.pseudo_dojo
-$ abacus -v # should give: ABACUS version v3.10.0
+Label                               Type string                Count
+----------------------------------  -------------------------  -------
+PseudoDojo/0.4/PBE/SR/standard/upf  pseudo.family.pseudo_dojo  72
+$ abacus -v
+ABACUS version v3.10.0
 ```
 ::: -->
 
@@ -167,3 +173,10 @@ $ abacus -v # should give: ABACUS version v3.10.0
     ```
     It will present a log report of the process.
     To investigate more about the calculation, like raw inputs/outputs, see the [How To Check the results](#howto-check) page for details.
+
+
+:::{note}
+AiiDA supports many different schedulers apart from Direct Execution.
+If you are using a Batch Job Scheduler like [SLURM](https://slurm.schedmd.com/) to manage the job queues and execution on a compute resource, see supported
+[Batch Job Schedulers](https://aiida.readthedocs.io/projects/aiida-core/en/latest/topics/schedulers.html).
+:::
