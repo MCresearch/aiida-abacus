@@ -4,6 +4,12 @@
 
 This guide walks you through installing **aiida-abacus**, configuring AiiDA, and setting up everything you need to run ABACUS calculations.
 
+## Quick start
+
+Try this plugin with a live JupyterLab server with Binder: [![Binder][binder-badge]][binder-link]
+
+For a one-stop environment setup and a quick start with running calculations, please see the [Tutorials](#tutorials-quick-start).
+
 ---
 
 ## Requirements
@@ -120,3 +126,7 @@ See [aiida-pseudo](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for
 ## Note
 
 Since [`AiiDA-core`](https://www.aiida.net/) itself is under active development, the installation and configuration may change over time and you should consult the [AiiDA docs](https://aiida.readthedocs.io/projects/aiida-core/en/latest/index.html) for latest details. The guidelines we provide here are for reference only and may be out of date. If so, please [open an issue](https://github.com/MCresearch/aiida-abacus/issue) or [submit a pull request](https://github.com/MCresearch/aiida-abacus/pulls) on our GitHub Repo to update.
+
+
+[binder-badge]: https://mybinder.org/badge_logo.svg
+[binder-link]: https://mybinder.org/v2/gh/MCresearch/aiida-abacus/HEAD?urlpath=%2Fdoc%2Ftree%2Fexamples%2Fbinder-example.ipynb
