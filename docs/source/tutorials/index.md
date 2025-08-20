@@ -12,6 +12,8 @@ Click the Binder badge [![Binder][binder-badge]][binder-link] to launch a **zero
 In two minutes you’ll have AiiDA + ABACUS fully set-up—complete with ready-to-run notebooks that let you submit calculations, track provenance, and visualize results right in your browser.
 :::
 
+You can also run `binder-example.ipynb` in the `examples` directory locally for a glimpse into `aiida-abacus`.
+
 ## Run locally
 
 To start locally:

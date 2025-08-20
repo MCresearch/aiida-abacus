@@ -71,11 +71,13 @@ Here goes a quick demo of how to submit a calculation using this plugin:
 ```shell
 verdi daemon start      # make sure the daemon is running
 cd examples
-verdi run launch.py     # run example calculation
+verdi run example_pw_Si2.py     # run example calculation
 verdi process list -a   # check record of calculation
 ```
 * Running calculations on a cluster is essentially the same, except that you need to configure the remote computer.
 - We provide a simple setup demo `remote-slurm-ssh-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource. Please configure `prepend_text` according to your remote environment if Intel® oneAPI Toolkit is used to build ABACUS.
+
+- You can also run the interactive Jupyter notebook `binder-example.ipynb` in the `examples` directory locally for a glimpse into `aiida-abacus`.
 
 The plugin also includes verdi commands to inspect its data types:
 ```shell
