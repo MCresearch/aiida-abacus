@@ -138,6 +138,9 @@ class AtomicOrbitalData(UpfData, DualfileMixin):
         super().__init__(file, filename, **kwargs)
         if orbital_file is not None:
             self.set_file_second(orbital_file, filename=orbital_filename)
+            with self.open_second(mode="rb") as handle:
+                md5_orbital = md5_from_filelike(handle)
+            self.md5_orbital = md5_orbital
 
     @property
     def cut_off_energy(self) -> float:
