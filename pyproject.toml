@@ -48,6 +48,12 @@ docs = [
     'sphinx-autoapi~=3.0.0',
     'myst-parser~=3.0.0',
 ]
+tutorial = [
+    "pymatgen",
+    "ase-weas-widget",
+    "aiida-vasp",
+    "sumo",
+]
 
 [project.urls]
 Source = "https://github.com/MCresearch/aiida-abacus"
