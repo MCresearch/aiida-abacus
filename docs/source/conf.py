@@ -34,6 +34,7 @@ load_profile(temp_profile, allow_switch=True)
 # ones.
 extensions = [
     "myst_parser",
+    "sphinxemoji.sphinxemoji",
     "sphinx.ext.autodoc",
     "sphinx.ext.mathjax",
     "sphinx.ext.intersphinx",
@@ -42,7 +43,6 @@ extensions = [
     "sphinx_click.ext",
     "sphinx_design",
     "sphinxcontrib.contentui",
-    "sphinxemoji.sphinxemoji",
     "aiida.sphinxext",
     "autoapi.extension",
 ]
@@ -65,10 +65,10 @@ intersphinx_mapping = {
 templates_path = ["_templates"]
 
 # The suffix of source filenames.
-source_suffix = ".rst"
+# source_suffix = ".rst"
 
 # The encoding of source files.
-# source_encoding = 'utf-8-sig'
+source_encoding = "utf-8-sig"
 
 # The master toctree document.
 # ~ master_doc = 'index'
@@ -128,8 +128,8 @@ pygments_style = "sphinx"
 # html_theme_options = {}
 html_theme = "sphinx_book_theme"
 html_theme_options = {
-    "repository_url": "https://github.com/aiida-abacus/aiida-abacus",
-    # 'github_url': "https://github.com/aiida-abacus/aiida-abacus",
+    "repository_url": "https://github.com/MCresearch/aiida-abacus",
+    "github_url": "https://github.com/MCresearch/aiida-abacus",
     "use_edit_page_button": True,
     "navigation_with_keys": False,
     "logo": {
@@ -254,3 +254,4 @@ copybutton_prompt_text = r">>> |\.\.\. |(?:\(.*\) )?\$ |In \[\d*\]: | {2,5}\.\.\
 copybutton_prompt_is_regexp = True
 
 sphinxemoji_style = "twemoji"
+sphinxemoji_source = "https://unpkg.com/twemoji@latest/dist/twemoji.min.js"
