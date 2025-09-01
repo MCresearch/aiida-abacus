@@ -14,3 +14,9 @@ dist/
 pip-wheel-metadata/
 .tox/
 *.restart
+
+
+# uv
+.venv
+uv.lock
+.python-version
