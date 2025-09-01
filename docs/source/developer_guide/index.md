@@ -2,7 +2,9 @@
 
 Our `aiida-abacus` plugin and doc page is under construction.
 
-We warmly welcome contributions to aiida-abacus. |:slightly_smiling_face:|
+We warmly welcome contributions to aiida-abacus. 🙂
+<!-- 🙂 -->
+<!-- |:slightly_smiling_face:| -->
 
 Please open an issue in [our repo](https://github.com/MCresearch/aiida-abacus) if you want to do something.
 
