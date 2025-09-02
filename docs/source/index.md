@@ -27,9 +27,10 @@ howto/workflows/index -->
 
 ```{toctree}
 :hidden: true
-:caption: Developer Guide
+:caption: Guides
 
-developer_guide/index
+guides/index
+guides/useful_information
 ```
 
 <!-- ```{toctree}
