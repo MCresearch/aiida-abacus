@@ -16,92 +16,231 @@ You can also run `binder-example.ipynb` in the `examples` directory locally for 
 
 ## Run locally
 
-To start locally:
+To start locally, we'll set up both [AiiDA](https://www.aiida.net/sections/download.html) environment and [ABACUS](https://github.com/deepmodeling/abacus-develop).
 
-1. First we will configure the [AiiDA](https://www.aiida.net/) environment. A computer and the corresponding code will be set available.
+We provide an easy installation and configuration guide for a **local ABACUS LTSv3.10.0** tested on **Ubuntu 22.04 LTS** calculation with `Pseudo-Dojo v0.4` here. You can follow the guide or skip if some steps are already done. Adapt the configuration to suit your tastes.
 
-    We provide an easy installation and configuration guide for a **local ABACUS LTSv3.10.0/Ubuntu** calculation with `Pseudo-Dojo v0.4` here. You can follow the guide or skip if some steps are already done. Adapt the configuration to suit your tastes.
-
-    :::{tip}
-    ### Quick one-command install
-    If you simply want everything ready on **Ubuntu/WSL**, run once:
-    ```console
-    $ sudo apt update
-    $ xargs -a .binder/apt.txt sudo apt install -y      # system deps
-    $ conda create -n aiida python=3.10 -y && conda activate aiida
-    $ bash .binder/postBuild                            # 5-stage automatic setup            
-    ```
-    The script performs the following stages — each can also be executed manually if you prefer full control.
-    :::
-
-    0. It is recommended to use a virtual environment.
-    ```console
-    $ conda create -n aiida python=3.10 -y
-    $ conda activate aiida
-    ```
-
-    1. Install system dependencies (Ubuntu)
-    ```console
-    $ sudo apt update
-    $ xargs -a .binder/apt.txt sudo apt install -y      # system deps
-    ```
-
-    2. Install Python packages.
-    ```console
-    $ pip install -e .
-    $ pip install pymatgen ase-weas-widget aiida-vasp sumo
-    ```
-
-    3. Build ABACUS **LTSv3.10.0**.
-    ```bash
-    $ git clone https://github.com/deepmodeling/abacus-develop.git
-    $ cd abacus-develop
-    $ git checkout LTSv3.10.0
-    $ cmake -B build \
-        -DCMAKE_INSTALL_PREFIX=$PWD \
-        -DENABLE_RAPIDJSON=ON
-        cmake --build build -j$(nproc)
-        cmake --install build
-    ```
-    This compiles ABACUS with LibXC and LibRI support and places the binary at `abacus-develop/bin/abacus`.
-    You can use your local ABACUS directly.
-
-    4. Initialize AiiDA
-    ```console
-    $ verdi presto
-    ```
-    Creates a lightweight AiiDA profile using SQLite and localhost (no RabbitMQ required for the tutorial).
-
-    5. Register the ABACUS code
-    ```bash
-    $ verdi code create core.code.installed -n \
-        -Y localhost -L abacus \
-        -D "ABACUS LTSv3.10.0" -P abacus.abacus \
-        -X $(pwd)/abacus-develop/bin/abacus
-    ```
-    Adds the freshly built executable to AiiDA as `abacus@localhost`.
-
-    6. Install pseudopotentials and finalize
-    ```bash
-    $ aiida-pseudo install pseudo-dojo -f upf
-    $ verdi -p presto computer configure core.local localhost \
-        -n --no-use-login-shell --safe-interval 1
-    ```
-    Downloads the **Pseudo-Dojo v0.4 PBE SR standard UPF** family and configures the localhost computer to suppress login-shell artifacts.
+First you should choose one package manager like `conda`, `uv`, and then install packages with it.
 
 
-See [Installation — AiiDA documentation](https://aiida.readthedocs.io/projects/aiida-core/en/latest/installation/index.html) for a complete installation guide.
+### Prerequisites
 
+#### 1. Package manager installation
+
+It is recommended to use a virtual environment, like [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) and [uv](https://docs.astral.sh/uv/).
+To install if you have not already had one, run the following command(see [conda install](https://www.anaconda.com/docs/getting-started/miniconda/install#linux-2) and [uv installation](https://docs.astral.sh/uv/getting-started/installation/)):
+
+
+::::{tab-set}
+
+:::{tab-item} conda
+Install Miniconda:
+```console
+$ mkdir -p ~/miniconda3
+$ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+$ bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+$ rm ~/miniconda3/miniconda.sh
+```
+After installing, close and reopen your terminal application or refresh it by running the following command:
+```console
+$ source ~/miniconda3/bin/activate
+```
+Finally initialize conda on all available shells:
+```console
+$ conda init --all
+```
+:::
+
+:::{tab-item} uv (faster alternative)
+Install uv with one single line:
+```console
+$ curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+If installing from PyPI:
+```console
+$ pipx install uv
+```
+And `pip` can also be used:
+```console
+$ pip install uv
+```
+:::
+::::
+
+Next we will setup AiiDA & ABACUS.
+
+::::{tab-set}
+
+:::{tab-item} Starting from scratch
+If you're new to both AiiDA and ABACUS, follow this complete setup:
+:::
+
+:::{tab-item} Already have ABACUS?
+If you already have ABACUS compiled, skip to [AiiDA setup](#aiida-setup).
+:::
+
+:::{tab-item} Already have AiiDA?
+If you already have an AiiDA environment, skip to [ABACUS compilation](#compile-abacus).
+:::
+::::
+
+
+
+:::::{tip}
+#### Quick one-command install
+
+If you simply want everything ready on **Ubuntu/WSL**, run once:
+
+::::{tab-set}
+:::{tab-item} conda
+<!-- If you simply want everything ready on **Ubuntu/WSL**, run once (with conda as package manager): -->
+```console
+$ git clone https://github.com/MCresearch/aiida-abacus.git
+$ cd aiida-abacus
+$ sudo apt update
+$ xargs -a .binder/apt.txt sudo apt install -y      # system deps
+$ conda create -n aiida python=3.10 -y && conda activate aiida
+$ bash .binder/postBuild          # 5-stage automatic setup
+```
+:::
+:::{tab-item} uv
+<!-- If you simply want everything ready on **Ubuntu/WSL**, run once (with uv as package manager): -->
+```console
+$ git clone https://github.com/MCresearch/aiida-abacus.git
+$ cd aiida-abacus
+$ sudo apt update
+$ xargs -a .binder/apt.txt sudo apt install -y      # system deps
+$ uv sync --extra tutorial
+$ source .venv/bin/activate
+$ bash .binder/postBuild          # 5-stage automatic setup
+```
+:::
+::::
+
+The script performs the following stages — each can be executed manually if you prefer full control.
+:::::
+
+<!-- $ source ~/.bashrc  # or restart your terminal -->
+
+
+(aiida-setup)=
+
+#### 2. AiiDA environment setup
+
+Now let's install Python packages needed.
+
+::::{tab-set}
+
+:::{tab-item} conda
+```console
+$ conda create -n aiida python=3.10 -y
+$ conda activate aiida
+$ cd aiida-abacus
+$ pip install -e .
+$ pip install pymatgen ase-weas-widget aiida-vasp sumo
+```
+> Packages will be installed into the named env `~/miniconda3/envs/aiida/`.
+:::
+
+:::{tab-item} uv
+```console
+$ cd aiida-abacus
+$ uv sync --extra tutorial # --extra for project.optional-dependencies
+$ source .venv/bin/activate
+```
+> Packages will be installed into the local `.venv/` directory, isolated per project. If you want to use the venv, change directory to aiida-abacus first.
+:::
+::::
+
+Run this to install `aiida-abacus` itself in editable mode with dependencies and get some useful packages ready.
+
+(compile-abacus)=
+
+#### 3. ABACUS compilation
+
+We have tested the installation on
+- ✅ **Ubuntu 22.04 LTS**
+
+> **Note on ABACUS dependencies**: For earlier linux distributions, you may need to build ELPA from source. See [ABACUS installation guide](https://abacus.deepmodeling.com/en/latest/quick_start/easy_install.html).
+
+Install build dependencies for ABACUS (on Ubuntu here):
+
+```console
+$ sudo apt update
+$ xargs -a .binder/apt.txt sudo apt install -y      # system deps
+```
+
+Build ABACUS (Long-Term Support Version 3.10.0) from source and install in current working directory(i.e. `aiida-abacus` dir):
+
+```console
+$ git clone https://github.com/deepmodeling/abacus-develop.git  
+$ cd abacus-develop && \
+    git checkout LTSv3.10.0 && \
+    cmake -B build -DCMAKE_INSTALL_PREFIX=`pwd` -DENABLE_DEEPKS=OFF -DENABLE_LIBXC=ON -DENABLE_LIBRI=ON -DENABLE_RAPIDJSON=ON && \
+    cmake --build build -j`nproc` && \
+    cmake --install build && \
+    rm -rf build
+```
+This compiles ABACUS with [LibXC and LibRI support](https://abacus.deepmodeling.com/en/latest/advanced/install.html) and places the binary at `abacus-develop/bin/abacus`.
+:::{note}
+You can use your own local ABACUS executable as long as it has the same output format as [LTS](https://github.com/deepmodeling/abacus-develop/tree/LTS) version.
+:::
+Verify ABACUS compilation:
+```console
+$ ./bin/abacus -v
+Should output: ABACUS version v3.10.0
+```
+
+#### 4. Configuration
+
+Finally we'll configure the `computer` and `code` used for AiiDA calculation.
+
+```console
+$ verdi presto
+$ verdi code create core.code.installed -n \
+    -Y localhost -L abacus \
+    -D "ABACUS LTSv3.10.0" -P abacus.abacus \
+    -X $(pwd)/abacus-develop/bin/abacus
+$ aiida-pseudo install pseudo-dojo -f upf
+$ verdi -p presto computer configure core.local localhost \
+    -n --no-use-login-shell --safe-interval 1
+```
+- `verdi presto` creates a lightweight AiiDA profile.
+
+- `verdi code create` adds the freshly built executable to AiiDA as `abacus@localhost`.
+
+- `aiida-pseudo` downloads the **Pseudo-Dojo v0.4 PBE SR standard UPF** family.
+
+- The last command non-interactively configures the localhost computer with a 1-second polling interval and disables login-shell execution, preventing any spurious output from `.bashrc` or `.zshrc`.
 
 After these steps, we're ready to submit our first calculation.
 
+
+
 ---
 
-2. Activate the AiiDA virtual environment.
+### Run a calculation
 
-```console
-$ conda activate aiida
-```
+1. Follow the instructions above to install AiiDA and configure ABACUS code on the computer.
+
+2. Activate the AiiDA virtual environment, so every subsequent call to `verdi`, or any plugin uses the correct interpreter and dependencies.
+
+    <!-- To initialize the environment: -->
+
+    ::::{tab-set}
+
+    :::{tab-item} conda
+    ```console
+    $ conda activate aiida
+    ```
+    :::
+
+    :::{tab-item} uv
+    ```console
+    $ source .venv/bin/deactivate
+    ```
+    :::
+    ::::
 
 3. Start the daemon.
     ```console

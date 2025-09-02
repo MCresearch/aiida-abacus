@@ -5,6 +5,7 @@
 This guide walks you through installing **aiida-abacus**, configuring AiiDA, and setting up everything you need to run ABACUS calculations.
 
 ## Quick start
+
 :::{attention}
 **No time to install?**  
 Click the Binder badge [![Binder][binder-badge]][binder-link] to launch a **zero-install** JupyterLab.  
