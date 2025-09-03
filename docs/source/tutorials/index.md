@@ -32,8 +32,11 @@ To install if you have not already had one, run the following command(see [conda
 
 
 ::::{tab-set}
+:sync-group: pkgmgr
 
 :::{tab-item} conda
+:sync: conda
+
 Install Miniconda:
 ```console
 $ mkdir -p ~/miniconda3
@@ -52,6 +55,8 @@ $ conda init --all
 :::
 
 :::{tab-item} uv (faster alternative)
+:sync: uv
+
 Install uv with one single line:
 ```console
 $ curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -92,7 +97,11 @@ If you already have an AiiDA environment, skip to [ABACUS compilation](#compile-
 If you simply want everything ready on **Ubuntu/WSL**, run once:
 
 ::::{tab-set}
+:sync-group: pkgmgr
+
 :::{tab-item} conda
+:sync: conda
+
 <!-- If you simply want everything ready on **Ubuntu/WSL**, run once (with conda as package manager): -->
 ```console
 $ git clone https://github.com/MCresearch/aiida-abacus.git
@@ -104,6 +113,8 @@ $ bash .binder/postBuild          # 5-stage automatic setup
 ```
 :::
 :::{tab-item} uv
+:sync: uv
+
 <!-- If you simply want everything ready on **Ubuntu/WSL**, run once (with uv as package manager): -->
 ```console
 $ git clone https://github.com/MCresearch/aiida-abacus.git
@@ -130,8 +141,11 @@ The script performs the following stages — each can be executed manually if yo
 Now let's install Python packages needed.
 
 ::::{tab-set}
+:sync-group: pkgmgr
 
 :::{tab-item} conda
+:sync: conda
+
 ```console
 $ conda create -n aiida python=3.10 -y
 $ conda activate aiida
@@ -143,6 +157,8 @@ $ pip install pymatgen ase-weas-widget aiida-vasp sumo
 :::
 
 :::{tab-item} uv
+:sync: uv
+
 ```console
 $ cd aiida-abacus
 $ uv sync --extra tutorial # --extra for project.optional-dependencies
@@ -227,20 +243,25 @@ After these steps, we're ready to submit our first calculation.
 
     <!-- To initialize the environment: -->
 
-    ::::{tab-set}
+::::{tab-set}
+:sync-group: pkgmgr
 
-    :::{tab-item} conda
-    ```console
-    $ conda activate aiida
-    ```
-    :::
+:::{tab-item} conda
+:sync: conda
 
-    :::{tab-item} uv
-    ```console
-    $ source .venv/bin/deactivate
-    ```
-    :::
-    ::::
+```console
+$ conda activate aiida
+```
+:::
+
+:::{tab-item} uv
+:sync: uv
+
+```console
+$ source .venv/bin/deactivate
+```
+:::
+::::
 
 3. Start the daemon.
     ```console

@@ -45,6 +45,7 @@ extensions = [
     "sphinxcontrib.contentui",
     "aiida.sphinxext",
     "autoapi.extension",
+    "sphinx_design",
 ]
 
 myst_enable_extensions = [
