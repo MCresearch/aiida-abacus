@@ -137,6 +137,12 @@ docstring-quotes = "double"
 [tool.hatch.version]
 path = "src/aiida_abacus/__init__.py"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "docs/",
+  "tests/",
+]
+
 [tool.hatch.envs.hatch-test]
 dependencies = [
     'pgtest~=1.3,>=1.3.1',
