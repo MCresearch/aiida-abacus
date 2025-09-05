@@ -110,7 +110,7 @@ class AtomicOrbitalCollection(orm.Group):
                 try:
                     orb = self.get_orbital(element, orbital_type, rcut)
                 except NotExistent as _:
-                    print(f"No orbital found for {element} with rcut {rcut}, " " trying increasing it by 1")
+                    print(f"No orbital found for {element} with rcut {rcut},  trying increasing it by 1")
                     rcut += 1
                 if orb is not None:
                     break
