@@ -26,12 +26,17 @@ pip install aiida-abacus
 ``` -->
 
 Install from source:
+### install using `pip`
 ```bash
 git clone https://github.com/MCresearch/aiida-abacus.git
 cd aiida-abacus
 pip install .
 # or pip install -e .
 # if you want to make a change to the plugin
+```
+### install using `uv`
+```bash
+uv sync
 ```
 
 We recommend using `aiida-abacus` with [ABACUS LTS (`v3.10.0`)](https://github.com/deepmodeling/abacus-develop/releases/tag/LTSv3.10.0).
@@ -56,7 +61,11 @@ At least one pseudo potential family should be installed. For more information o
 
 ## Documentation
 
+See [our online docs](https://aiida-abacus.readthedocs.io/).
+
 - Quick start
+
+We ofter a [quick start tutorial](https://aiida-abacus.readthedocs.io/en/latest/tutorials/index.html) that provides two ways to get started: try Aiida-ABACUS instantly with our live JupyterLab environment powered by Binder, or follow the step-by-step guide to quickly set up a local installation and begin using the plugin.
 
 See the `examples` directory to learn about how to run this plugin with scripts.
 
@@ -75,7 +84,7 @@ verdi run example_pw_Si2.py     # run example calculation
 verdi process list -a   # check record of calculation
 ```
 * Running calculations on a cluster is essentially the same, except that you need to configure the remote computer.
-- We provide a simple setup demo `remote-slurm-ssh-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource. Please configure `prepend_text` according to your remote environment if Intel® oneAPI Toolkit is used to build ABACUS.
+- We provide simple setup demo config files `remote-slurm-ssh-setup.yml` and `localhost-direct-local-setup.yml` in the `examples` dir. You can follow the guide in [How to set up a computer](https://aiida.readthedocs.io/projects/aiida-core/en/latest/howto/run_codes.html#how-to-set-up-a-computer) to configure a computational resource. Please configure `prepend_text` according to your remote environment if [Intel® oneAPI Toolkit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/toolkits.html) is used to build ABACUS.
 
 - You can also run the interactive Jupyter notebook `binder-example.ipynb` in the `examples` directory locally for a glimpse into `aiida-abacus`.
 
@@ -95,8 +104,6 @@ pip install -e .[pre-commit,testing]  # install extra dependencies
 pre-commit install  # install pre-commit hooks
 pytest -v  # discover and run all tests
 ```
-
-Developer guide is still under construction.
 
 ### Repository contents
 
