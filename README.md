@@ -19,24 +19,28 @@ See [Tutorials](https://aiida-abacus.readthedocs.io/en/latest/tutorials/index.ht
 
 ## Installation
 
-<!-- Install using pip:
+### Install from PyPI:
 
 ```shell
 pip install aiida-abacus
-``` -->
+```
 
-Install from source:
-### install using `pip`
+### Install from source:
+First clone the source code:
 ```bash
 git clone https://github.com/MCresearch/aiida-abacus.git
 cd aiida-abacus
+```
+Then install locally:
+- install using `pip`
+```bash
 pip install .
 # or pip install -e .
 # if you want to make a change to the plugin
 ```
-### install using `uv`
+- install using `uv`
 ```bash
-uv sync
+uv sync # use --extra like [--extra pre-commit] to include optional dependencies
 ```
 
 We recommend using `aiida-abacus` with [ABACUS LTS (`v3.10.0`)](https://github.com/deepmodeling/abacus-develop/releases/tag/LTSv3.10.0).
