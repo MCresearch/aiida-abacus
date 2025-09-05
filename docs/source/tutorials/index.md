@@ -6,8 +6,8 @@ This page show how to work with AiiDA and run a simple ABACUS calculation using 
 
 ## Quick start
 
-:::{attention}
-**No time to install?**  
+:::{admonition} **No time to install?**
+:class: tip
 Click the Binder badge [![Binder][binder-badge]][binder-link] to launch a **zero-install** JupyterLab.  
 In two minutes you’ll have AiiDA + ABACUS fully set-up—complete with ready-to-run notebooks that let you submit calculations, track provenance, and visualize results right in your browser.
 :::
