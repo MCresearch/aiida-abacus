@@ -129,7 +129,7 @@ class AbacusCalculation(CalcJob):
         spec.output(
             "misc",
             valid_type=orm.Dict,
-            help="The scalar outputs or" "small vectors (e.g., energy, forces, stress) of the calculation.",
+            help="The scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.",
             required=True,
         )
         spec.output(

@@ -54,6 +54,9 @@ tutorial = [
     "aiida-vasp",
     "sumo",
 ]
+dev = [
+    "ruff>=0.12.12",
+]
 
 [project.urls]
 Source = "https://github.com/MCresearch/aiida-abacus"
@@ -120,8 +123,14 @@ select = [
   'PLE',  # pylint-error
   'PLR',  # pylint-refactor
   'PLW',  # pylint-warning
-  'RUF'  # ruff
+  'RUF',  # ruff
+  'Q',    # flake8-quotes
 ]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+multiline-quotes = "double"
+docstring-quotes = "double"
 
 ## Hatch configurations
 

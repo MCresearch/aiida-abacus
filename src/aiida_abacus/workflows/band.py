@@ -70,7 +70,7 @@ class AbacusBandWorkChain(WorkChain):
         spec.output(
             "primitive_structure",
             valid_type=orm.StructureData,
-            help="Primitive structure for which the band" "structure is calculated for.",
+            help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
 

@@ -38,22 +38,22 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         """Define the process specification."""
         # yapf: disable
         super().define(spec)
-        spec.expose_inputs(AbacusBaseWorkChain, namespace='base',
-            exclude=('clean_workdir', 'abacus.structure', 'abacus.parent_folder'),
-            namespace_options={'help': 'Inputs for the `AbacusBaseWorkChain` for the main relax loop.'})
-        spec.expose_inputs(AbacusBaseWorkChain, namespace='base_final_scf',
-            exclude=('clean_workdir', 'abacus.structure', 'abacus.parent_folder'),
-            namespace_options={'required': False, 'populate_defaults': False,
-                'help': 'Inputs for the `AbacusBaseWorkChain` for the final scf.'})
-        spec.input('structure', valid_type=orm.StructureData, help='The inputs structure.')
-        spec.input('meta_convergence', valid_type=orm.Bool, default=lambda: orm.Bool(True),
-            help='If `True` the workchain will perform a meta-convergence on the cell volume.')
-        spec.input('max_meta_convergence_iterations', valid_type=orm.Int, default=lambda: orm.Int(5),
-            help='The maximum number of variable cell relax iterations in the meta convergence cycle.')
-        spec.input('volume_convergence', valid_type=orm.Float, default=lambda: orm.Float(0.01),
-            help='The volume difference threshold between two consecutive meta convergence iterations.')
-        spec.input('clean_workdir', valid_type=orm.Bool, default=lambda: orm.Bool(False),
-            help='If `True`, work directories of all called calculation will be cleaned at the end of execution.')
+        spec.expose_inputs(AbacusBaseWorkChain, namespace="base",
+            exclude=("clean_workdir", "abacus.structure", "abacus.parent_folder"),
+            namespace_options={"help": "Inputs for the `AbacusBaseWorkChain` for the main relax loop."})
+        spec.expose_inputs(AbacusBaseWorkChain, namespace="base_final_scf",
+            exclude=("clean_workdir", "abacus.structure", "abacus.parent_folder"),
+            namespace_options={"required": False, "populate_defaults": False,
+                "help": "Inputs for the `AbacusBaseWorkChain` for the final scf."})
+        spec.input("structure", valid_type=orm.StructureData, help="The inputs structure.")
+        spec.input("meta_convergence", valid_type=orm.Bool, default=lambda: orm.Bool(True),
+            help="If `True` the workchain will perform a meta-convergence on the cell volume.")
+        spec.input("max_meta_convergence_iterations", valid_type=orm.Int, default=lambda: orm.Int(5),
+            help="The maximum number of variable cell relax iterations in the meta convergence cycle.")
+        spec.input("volume_convergence", valid_type=orm.Float, default=lambda: orm.Float(0.01),
+            help="The volume difference threshold between two consecutive meta convergence iterations.")
+        spec.input("clean_workdir", valid_type=orm.Bool, default=lambda: orm.Bool(False),
+            help="If `True`, work directories of all called calculation will be cleaned at the end of execution.")
         spec.inputs.validator = validate_relax_inputs
         spec.outline(
             cls.setup,
@@ -67,13 +67,13 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
             ),
             cls.results,
         )
-        spec.exit_code(401, 'ERROR_SUB_PROCESS_FAILED_RELAX',
-            message='the relax AbacusBaseWorkChain sub process failed')
-        spec.exit_code(402, 'ERROR_SUB_PROCESS_FAILED_FINAL_SCF',
-            message='the final scf AbacusBaseWorkChain sub process failed')
-        spec.expose_outputs(AbacusBaseWorkChain, exclude=('structure',))
-        spec.output('structure', valid_type=orm.StructureData, required=False,
-            help='The successfully relaxed structure.')
+        spec.exit_code(401, "ERROR_SUB_PROCESS_FAILED_RELAX",
+            message="the relax AbacusBaseWorkChain sub process failed")
+        spec.exit_code(402, "ERROR_SUB_PROCESS_FAILED_FINAL_SCF",
+            message="the final scf AbacusBaseWorkChain sub process failed")
+        spec.expose_outputs(AbacusBaseWorkChain, exclude=("structure",))
+        spec.output("structure", valid_type=orm.StructureData, required=False,
+            help="The successfully relaxed structure.")
         # yapf: enable
 
     @classmethod
