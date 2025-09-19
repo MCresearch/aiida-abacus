@@ -55,14 +55,14 @@ class AbacusRawParser(BaseRawParser):
                 for line in lines:
                     tokens = line.split()
                     forces.append([float(token) for token in tokens[1:]])
-                    all_forces.append(forces)
+                all_forces.append(forces)
                 self.results["force_unit"] = block_unit
 
             if block_type == "STRESS":
                 stress = []
                 for line in lines:
                     stress.append([float(token) for token in line.split()])
-                    all_stress.append(stress)
+                all_stress.append(stress)
                 self.results["stress_unit"] = block_unit
         self.results["all_forces"] = all_forces
         self.results["all_stress"] = all_stress
