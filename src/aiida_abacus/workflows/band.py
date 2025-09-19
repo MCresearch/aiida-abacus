@@ -2,19 +2,22 @@
 Workflow for performing band structure calculation
 """
 
+import pathlib
+
 import numpy as np
 from aiida import orm
 from aiida.common.extendeddicts import AttributeDict
+from aiida.common.lang import type_check
 from aiida.engine import ToContext, WorkChain, calcfunction, if_
 
-from aiida_abacus.common import prepare_process_inputs
+from aiida_abacus.common import ProtocolMixin, RelaxType, prepare_process_inputs
 from aiida_abacus.common.opthold import BandOptions
 
 from .base import AbacusBaseWorkChain
 from .relax import AbacusRelaxWorkChain
 
 
-class AbacusBandWorkChain(WorkChain):
+class AbacusBandWorkChain(WorkChain, ProtocolMixin):
     """
     Workflow for performing band structure calculation"""
 
@@ -73,6 +76,57 @@ class AbacusBandWorkChain(WorkChain):
             help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
+
+    @classmethod
+    def get_protocol_filepath(cls) -> pathlib.Path:
+        """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
+        return pathlib.Path(__file__).parent.parent / "protocols/band.yaml"
+
+    @classmethod
+    def get_builder_from_protocol(
+        cls, code, structure, protocol=None, overrides=None, relax_type=RelaxType.POSITIONS_CELL, options=None, **kwargs
+    ):
+        """
+        Return a builder for the workchain from a protocol.
+
+        :param code: the code to use for the calculation
+        :param structure: the structure to use for the calculation
+        :param protocol: the protocol to use for the calculation
+        :param overrides: overrides for the protocol inputs
+        :param relax_type: the type of relaxation to perform
+        :param options: the options to use for the calculation
+
+        :return: a builder for the workchain
+        """
+        inputs = cls.get_protocol_inputs(protocol, overrides)
+        base = AbacusBaseWorkChain.get_builder_from_protocol(
+            code=code,
+            structure=structure,
+            protocol=protocol,
+            overrides=inputs.get("base", None),
+            options=options,
+            **kwargs,
+        )
+        builder = cls.get_builder()
+        builder.base = base
+        builder.band_settings = inputs.get("band_settings", {})
+
+        # Configure relax port if relaxation is requested
+        if relax_type != RelaxType.NONE:
+            relax = AbacusRelaxWorkChain.get_builder_from_protocol(
+                code=code,
+                structure=structure,
+                protocol=protocol,
+                overrides=inputs.get("relax", None),
+                options=options,
+                relax_type=relax_type,
+                **kwargs,
+            )
+            builder.relax = relax
+
+        return builder
+
+        type_check(relax_type, RelaxType)
 
     def setup(self):
         """Setup the workchain"""

@@ -25,3 +25,7 @@ aiida-pseudo install pseudo-dojo -f upf
 
 # Fix for spurious output in the stdout - do not use the login shell
 verdi -p presto computer configure core.local localhost -n --no-use-login-shell --safe-interval 1
+
+# Add abacus to the PATH
+
+echo 'export PATH=$HOME/abacus-develop/bin:$PATH' >> $HOME/.bashrc
