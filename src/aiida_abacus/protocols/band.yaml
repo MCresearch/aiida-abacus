@@ -1,0 +1,12 @@
+default_inputs:
+  band_settings:
+    symprec: 1e-5
+
+default_protocol: balanced
+protocols:
+    balanced:
+        description: 'Protocol to perform a relaxation at normal precision at moderate computational cost.'
+    stringent:
+        description: 'Protocol to perform a relaxation at high precision at higher computational cost.'
+    fast:
+        description: 'Protocol to perform a relaxation at low precision at minimal computational cost for testing purposes.'
