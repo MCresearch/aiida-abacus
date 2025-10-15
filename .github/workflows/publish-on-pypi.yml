@@ -27,7 +27,8 @@ jobs:
 
     - name: Build and publish
       run: |
-        hatch publish --build
+        hatch build
+        hatch publish dist/*
       env:
         HATCH_INDEX_USER: __token__
         HATCH_INDEX_AUTH:  ${{ secrets.PYPI_API_TOKEN }}
