@@ -27,7 +27,8 @@ dependencies = [
     "ase",
     "pydantic",
     "tqdm",
-    "click-spinner"
+    "click-spinner",
+    "tabulate"
 ]
 
 [project.optional-dependencies]

@@ -348,14 +348,16 @@ class OrbitalFamilyImporter:
 
         # Create AtomicOrbitalData nodes
         orbital_data = []
+        new_orbital_data = []
         for orig_elem, orb_path, upf_path in matched_elements:
             try:
-                node = AtomicOrbitalData.get_or_create(upf_path, orb_path)
+                node = AtomicOrbitalData.get_or_create(str(upf_path), str(orb_path))
                 if node.is_stored:
                     log_info(f"Reusing existing node {node.pk} for element {orig_elem}")
                 else:
-                    orbital_data.append(node)
                     log_info(f"Created node for element {orig_elem}")
+                    new_orbital_data.append(node)
+                orbital_data.append(node)
             except Exception as e:
                 error_msg = f"Failed to create node for element {orig_elem}: {e}"
                 if stop_if_inconsistent:
@@ -367,7 +369,7 @@ class OrbitalFamilyImporter:
         if not orbital_data:
             if dryrun:
                 return None
-            log_warning("No new nodes to import (all may already exist)")
+            log_warning("No nodes to import (all may already exist)")
             return None
 
         if dryrun:
@@ -377,8 +379,8 @@ class OrbitalFamilyImporter:
             return None
 
         # Store and create the family group
-        log_info(f"Storing {len(orbital_data)} new nodes...")
-        for node in orbital_data:
+        log_info(f"Storing {len(new_orbital_data)} new nodes...")
+        for node in new_orbital_data:
             node.store()
 
         group = AtomicOrbitalFamily.collection.get_or_create(label=label)[0]

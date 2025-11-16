@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 import click
+import tabulate
 from aiida import orm as aiida_orm
 from aiida.cmdline.utils import echo
 from aiida.cmdline.utils.decorators import with_dbenv
@@ -42,6 +43,7 @@ def select_orbital_variants(element_variants):
         Dictionary mapping elements to selected orbital file paths
     """
     selected_orbitals = {}
+    manual_selection = {}
 
     print(f"\nOrbital variant selection for {len(element_variants)} elements:")
     print("=" * 60)
@@ -84,6 +86,7 @@ def select_orbital_variants(element_variants):
 
                 if 1 <= choice_num <= len(variants):
                     selected_orbitals[element] = variants[choice_num - 1]
+                    manual_selection[element] = variants[choice_num - 1].name
                     selected_file = variants[choice_num - 1].name
                     print(f"  Selected: {selected_file}")
                     break
@@ -95,7 +98,7 @@ def select_orbital_variants(element_variants):
                 print("\nOperation cancelled by user.")
                 raise
 
-    return selected_orbitals
+    return selected_orbitals, manual_selection
 
 
 @cmd_aiida_abacus.group("pseudos")
@@ -337,7 +340,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool) -> No
                         echo.echo(
                             "Multiple orbital variants found - launching interactive selection" f"for {family_name}"
                         )
-                        selected_orbitals = select_orbital_variants(element_orbitals)
+                        selected_orbitals, manual_selection = select_orbital_variants(element_orbitals)
 
                         # Store variant choices for group extras
                         for element, orbital_path in selected_orbitals.items():
@@ -367,7 +370,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool) -> No
                     if group is not None:
                         # Store variant choices in group extras
                         if variant_choices:
-                            group.base.extras.set("variant_choices", variant_choices)
+                            group.base.extras.set("variant_choices", manual_selection)
 
                         echo.echo_success(
                             f"Successfully imported family '{final_family_name}' with {group.count()} orbitals"
@@ -402,25 +405,114 @@ def list_families() -> None:
     """List all imported orbital families."""
     try:
         qb = QueryBuilder()
-        qb.append(AtomicOrbitalFamily, project=["label", "description"])
+        qb.append(AtomicOrbitalFamily, project=["id", "label", "description"])
         families = qb.all()
 
         if not families:
             echo.echo_info("No orbital families found. Use 'aiida-abacus pseudos install' to import some.")
             return
 
-        echo.echo_info("Imported orbital families:")
-        for label, description in families:
+        # Prepare data for table
+        table_data = []
+        for pk, label, description in families:
             # Get count of nodes in the family
             qb_count = QueryBuilder()
             qb_count.append(AtomicOrbitalFamily, filters={"label": label})
             qb_count.append(aiida_orm.Data, with_group=AtomicOrbitalFamily)
             node_count = qb_count.count()
 
-            echo.echo(f"  {label}: {node_count} orbitals")
-            if description:
-                echo.echo(f"    {description}")
-        echo.echo("")
+            # Get variant choices if available
+            family = load_group(label)
+            variant_choices = family.base.extras.get("variant_choices", {})
+            if variant_choices:
+                variant_info = f"{len(variant_choices)} elements with variants"
+            else:
+                variant_info = "Default"
+            table_data.append([pk, label, node_count, variant_info, description or "No description"])
+
+        # Sort by family name
+        table_data.sort(key=lambda x: x[0])
+
+        # Display the table using tabulate
+        echo.echo_info("Imported orbital families:")
+        headers = ["PK", "Family Name", "Orbitals", "Variants", "Description"]
+        echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
 
     except Exception as e:
         echo.echo_error(f"Failed to list families: {e}")
+
+
+@pseudos.command("show-family")
+@click.argument("family_label")
+@with_dbenv()
+def show_family(family_label: str) -> None:
+    """Show detailed information about a specific orbital family, including pseudopotentials and orbitals."""
+    try:
+        # Find the family
+        qb = QueryBuilder()
+        qb.append(AtomicOrbitalFamily, filters={"label": family_label})
+        family_result = qb.first()
+
+        if not family_result:
+            echo.echo_error(f"Family '{family_label}' not found.")
+            echo.echo_info("Available families:")
+            qb_all = QueryBuilder()
+            qb_all.append(AtomicOrbitalFamily, project=["label"])
+            for (label,) in qb_all.all():
+                echo.echo(f"  {label}")
+            return
+
+        family = family_result[0]
+
+        # Get description and variant choices if available
+        description = getattr(family, "description", "No description available")
+        variant_choices = family.base.extras.get("variant_choices", {})
+
+        echo.echo_info(f"Family: {family_label}")
+        echo.echo(f"Description: {description}")
+        echo.echo(f"Number of orbitals: {family.count()}")
+
+        if variant_choices:
+            echo.echo_info(f"Variant choices stored: {len(variant_choices)} elements")
+            echo.echo("  Selected orbital files:")
+            for element, filename in sorted(variant_choices.items()):
+                echo.echo(f"    {element}: {filename}")
+        echo.echo("")
+
+        # Get all orbital data nodes in the family
+        qb_orbitals = QueryBuilder()
+        qb_orbitals.append(AtomicOrbitalFamily, filters={"label": family_label})
+        qb_orbitals.append(aiida_orm.Data, with_group=AtomicOrbitalFamily)
+
+        orbitals = qb_orbitals.all()
+
+        if not orbitals:
+            echo.echo_warning("No orbitals found in this family.")
+            return
+
+        # Prepare data for table
+        table_data = []
+        for (orbital_node,) in orbitals:
+            # Get orbital attributes
+            element = orbital_node.base.attributes.get("element", "Unknown")
+            orbital_filename = orbital_node.base.attributes.get("filename_second", "Unknown")
+            upf_filename = orbital_node.base.attributes.get("filename", "Unknown")
+
+            table_data.append([str(orbital_node.pk), element, orbital_filename, upf_filename])
+
+        # Sort by element for better readability
+        table_data.sort(key=lambda x: x[1])
+
+        # Display the table using tabulate
+        echo.echo_info("Orbital and pseudopotential details:")
+        headers = ["PK", "Element", "Orbital File", "Pseudopotential File"]
+        echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
+
+        echo.echo("")
+        echo.echo_info(f"Total: {len(orbitals)} elements in family")
+
+    except Exception as e:
+        echo.echo_error(f"Failed to show family '{family_label}': {e}")
+        import traceback
+
+        echo.echo_debug(f"Error details: {traceback.format_exc()}")
