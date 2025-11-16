@@ -1,11 +1,13 @@
 import json
 import pathlib
+import re
 import tempfile
 import typing as t
 import zipfile
 from collections import Counter
 from contextlib import contextmanager
 from itertools import chain
+from pathlib import Path
 from shutil import rmtree
 
 from aiida import orm
@@ -165,58 +167,220 @@ class OrbitalFamilyImporter:
         """
 
     @classmethod
-    def import_folder(cls, orbital_path, pseudo_path, label, dryrun=False) -> orm.Group:
+    def import_folder(
+        cls,
+        orbital_path,
+        pseudo_path,
+        label,
+        dryrun=False,
+        stop_if_inconsistent=True,
+        verbose=False,
+        variant_choices=None,
+    ) -> orm.Group:
         """
-        Import the folder
+        Import the folder with configurable consistency checking.
+
+        Parameters:
+        -----------
+        orbital_path : str or Path
+            Path to orbital files or archive
+        pseudo_path : str or Path
+            Path to pseudopotential files or archive
+        label : str
+            Label for the created family
+        dryrun : bool, default False
+            If True, only show what would be imported without actually importing
+        stop_if_inconsistent : bool, default True
+            If True, stop execution for any inconsistencies (original behavior)
+            If False, warn about inconsistencies but continue importing
+        verbose : bool, default False
+            If True, show detailed progress information
+        variant_choices : dict, default None
+            Dictionary mapping elements to selected orbital file paths
         """
         with temporary_unzip_folder(orbital_path) as orb_path:
             with temporary_unzip_folder(pseudo_path) as pseudo_path:
-                return cls._import_folders(orb_path, pseudo_path, label, dryrun)
+                return cls._import_folders(
+                    orb_path, pseudo_path, label, dryrun, stop_if_inconsistent, verbose, variant_choices
+                )
 
     @staticmethod
     def _import_folders(
-        orbital_path: pathlib.Path, pseudo_path: pathlib.Path, label: str, dryrun: bool = False
+        orbital_path: pathlib.Path,
+        pseudo_path: pathlib.Path,
+        label: str,
+        dryrun: bool = False,
+        stop_if_inconsistent: bool = True,
+        verbose: bool = False,
+        variant_choices=None,
     ) -> orm.Group:
-        """Inspect and import data"""
+        """Inspect and import data with configurable consistency checking."""
+
+        def log_info(message):
+            """Print info if verbose is enabled"""
+            if verbose:
+                print(message)
+
+        def log_warning(message):
+            """Print warning"""
+            print(f"Warning: {message}")
+
         orbital_files = []
         upf_files = []
-        for path in orbital_path.rglob("*.orb"):
-            metadata = parse_orb_metadata(path)
-            orbital_files.append([metadata["Element"], path])
 
-        for path in pseudo_path.rglob("*.upf"):
-            element = parse_element(path.read_text())
-            upf_files.append([element, path])
+        # Find all orbital files and extract element information
+        if variant_choices:
+            # Use the user-selected variants
+            log_info(f"Using {len(variant_choices)} pre-selected orbital variants")
+            for element, path in variant_choices.items():
+                orbital_files.append([element, Path(path)])
+        else:
+            # Find all orbital files and extract element information
+            for path in orbital_path.rglob("*.orb"):
+                try:
+                    metadata = parse_orb_metadata(path)
+                    element = metadata.get("Element", "").strip()
+                    if element:
+                        orbital_files.append([element, path])
+                    else:
+                        log_warning(f"No element found in orbital metadata for {path}")
+                except Exception as e:
+                    log_warning(f"Failed to parse orbital metadata from {path}: {e}")
+                    continue
 
-        # Check uniqueness of the elements and each orbital has its related UPF file
-        orbital_counts = Counter(element for element, _ in orbital_files)
-        upf_counts = Counter(element for element, _ in upf_files)
-        for element, count in orbital_counts.items():
-            if count > 1:
-                raise RuntimeError(f"Error: Found {count} orbitals for element {element}!")
-            if upf_counts[element] != 1:
-                raise RuntimeError(f"Error: Found {upf_counts[element]} UPF files for element {element}!")
+        # Find all UPF files with both case patterns and extract element information
+        for path in chain(
+            pseudo_path.rglob("*.upf"),
+            pseudo_path.rglob("*.UPF"),
+        ):
+            try:
+                element = parse_element(path.read_text())
+                if element:
+                    upf_files.append([element, path])
+            except Exception as e:
+                log_warning(f"Failed to parse UPF file {path}: {e}")
+                # Try to extract element from filename as fallback
+                filename = path.name
+                # Extract element from patterns like "Te.PD04.PBE.UPF" or "Ag.upf"
+                element_match = re.match(r"^([A-Z][a-z]?)", filename)
+                if element_match:
+                    element = element_match.group(1)
+                    upf_files.append([element, path])
+                    log_info(f"Extracted element '{element}' from filename {filename}")
 
-        # Create AtomicOrbitalData
-        orbitals = {key: value for key, value in orbital_files}
-        upfs = {key: value for key, value in upf_files}
+        log_info(f"Found {len(orbital_files)} orbital files and {len(upf_files)} UPF files")
+
+        # Check for true duplicates (identical filenames) and multiple orbital variants
+        orbital_counts = Counter(elem for elem, _ in orbital_files)
+        upf_counts = Counter(elem for elem, _ in upf_files)
+
+        # Check for true duplicate files (same filename) - this indicates corrupted archive
+        orbital_paths = [path.name for _, path in orbital_files]
+        upf_paths = [path.name for _, path in upf_files]
+
+        duplicate_orbital_files = {name: count for name, count in Counter(orbital_paths).items() if count > 1}
+        duplicate_upf_files = {name: count for name, count in Counter(upf_paths).items() if count > 1}
+
+        if duplicate_orbital_files:
+            error_msg = f"Duplicate orbital FILES found (corrupted archive): {duplicate_orbital_files}"
+            raise RuntimeError(f"Error: {error_msg}")
+
+        if duplicate_upf_files:
+            error_msg = f"Duplicate UPF FILES found (corrupted archive): {duplicate_upf_files}"
+            raise RuntimeError(f"Error: {error_msg}")
+
+        # Report multiple orbital variants per element (this is normal, not an error)
+        multiple_orbital_variants = {elem: count for elem, count in orbital_counts.items() if count > 1}
+        if multiple_orbital_variants:
+            log_info(f"Multiple orbital variants found for elements: {multiple_orbital_variants}")
+            log_info("These variants should be selected by the CLI layer before calling this import function")
+
+        # UPF files should have exactly 1 per element in non-corrupted archives
+        multiple_upf_variants = {elem: count for elem, count in upf_counts.items() if count > 1}
+        if multiple_upf_variants:
+            error_msg = f"Multiple UPF files found for elements (possible archive issue): {multiple_upf_variants}"
+            raise RuntimeError(f"Error: {error_msg}")
+
+        # Create mapping of elements (case-insensitive)
+        orbitals = {elem.lower(): (elem, path) for elem, path in orbital_files}
+        upfs = {elem.lower(): (elem, path) for elem, path in upf_files}
+
+        # Find matches and mismatches
+        matched_elements = []
+        unmatched_orbitals = []
+        unmatched_upfs = []
+
+        for elem_lower, (orig_elem, orb_path) in orbitals.items():
+            if elem_lower in upfs:
+                matched_elements.append((orig_elem, orb_path, upfs[elem_lower][1]))
+            else:
+                unmatched_orbitals.append(orig_elem)
+
+        for elem_lower, (orig_elem, upf_path) in upfs.items():
+            if elem_lower not in orbitals:
+                unmatched_upfs.append(orig_elem)
+
+        # Report findings
+        if unmatched_orbitals:
+            message = f"Orbitals without matching UPFs: {unmatched_orbitals}"
+            if stop_if_inconsistent:
+                raise RuntimeError(f"Error: {message}")
+            else:
+                log_warning(message)
+
+        if unmatched_upfs:
+            message = f"UPFs without matching orbitals: {unmatched_upfs}"
+            if stop_if_inconsistent:
+                raise RuntimeError(f"Error: {message}")
+            else:
+                log_info(message)
+
+        # Consistency checking: check for exact 1:1 mapping (duplicates already checked above)
+        if stop_if_inconsistent:
+            for element, count in upf_counts.items():
+                if count != 1 and element not in multiple_upf_variants:
+                    raise RuntimeError(f"Error: Found {count} UPF files for element {element}!")
+
+        if not matched_elements:
+            raise RuntimeError("No matching orbital-UPF pairs found!")
+
+        log_info(f"Found {len(matched_elements)} matching element pairs")
+
+        # Create AtomicOrbitalData nodes
         orbital_data = []
-        for element, orbital_path in tqdm(orbitals.items(), desc="Orbitals"):
-            if element not in upfs:
-                raise RuntimeError(f"Error: No UPF file found for element {element}!")
-            upf_path = upfs[element]
-            if dryrun:
-                print("Will import AtomicOrbitalData with:\n" f"Orbital: {orbital_path}\n" f"UPF: {upf_path}\n")
-                node = AtomicOrbitalData.get_or_create(upf_path, orbital_path)
+        for orig_elem, orb_path, upf_path in matched_elements:
+            try:
+                node = AtomicOrbitalData.get_or_create(upf_path, orb_path)
                 if node.is_stored:
-                    print(f"Reusing Node {node.pk} already exists in the database")
-                continue
+                    log_info(f"Reusing existing node {node.pk} for element {orig_elem}")
+                else:
+                    orbital_data.append(node)
+                    log_info(f"Created node for element {orig_elem}")
+            except Exception as e:
+                error_msg = f"Failed to create node for element {orig_elem}: {e}"
+                if stop_if_inconsistent:
+                    raise RuntimeError(error_msg)
+                else:
+                    print(f"Error: {error_msg}")
+                    continue
 
-            orbital_data.append(AtomicOrbitalData.get_or_create(upf_path, orbital_path))
+        if not orbital_data:
+            if dryrun:
+                return None
+            log_warning("No new nodes to import (all may already exist)")
+            return None
+
         if dryrun:
-            return
+            log_info("DRY RUN - Would import the following pairs:")
+            for orig_elem, orb_path, upf_path in matched_elements:
+                print(f"  {orig_elem}: {orb_path.name} + {upf_path.name}")
+            return None
+
         # Store and create the family group
-        [node.store() for node in orbital_data]
+        log_info(f"Storing {len(orbital_data)} new nodes...")
+        for node in orbital_data:
+            node.store()
+
         group = AtomicOrbitalFamily.collection.get_or_create(label=label)[0]
         group.add_nodes(orbital_data)
         return group
