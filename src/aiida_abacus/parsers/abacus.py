@@ -4,6 +4,9 @@ Parsers provided by aiida_abacus.
 Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
+import re
+
+import numpy as np
 from aiida import orm
 from aiida.common import exceptions
 from aiida.parsers.parser import Parser
@@ -67,14 +70,14 @@ class AbacusParser(Parser):
         main_log = next(filter(lambda x: "running_" in x, expected_files))
         misc_results = {}
         with output_folder.open(main_log, "r") as fhandle:
-            parser = AbacusRawParser(fhandle)
-        misc_results.update(parser.parse())
+            raw_parser = AbacusRawParser(fhandle)
+        misc_results.update(raw_parser.parse())
         misc_node = orm.Dict(dict=misc_results)
 
         # Parse the bands output if requested
         if self.check_include_node("bands"):
-            eigenvalues, occupations, _ = parser.parse_eigenvalues()
-            kpoints_direct, _ = parser.parse_kpoints()
+            eigenvalues, occupations, _ = raw_parser.parse_eigenvalues()
+            kpoints_direct, _ = raw_parser.parse_kpoints()
             kcoord = kpoints_direct[:, :3]
             kweights = kpoints_direct[:, 3]
             node = orm.BandsData()
@@ -97,7 +100,10 @@ class AbacusParser(Parser):
             for pos, symbol in zip(positions, species):
                 node.append_atom(position=pos, symbols=symbol)
             self.out("structure", node)
-            # TODO parse the trajectory output from STRU_ION*_D files
+            # Compose trajectory node
+            self.out(
+                "trajectory", compose_trajectory(output_folder, misc_results, self.node.process_class._OUTPUT_SUFFIX)
+            )
 
         # Parse the calculation raw parameters
         if self.check_include_node("internal_parameters"):
@@ -129,3 +135,43 @@ class AbacusParser(Parser):
         if "settings" not in self.node.inputs:
             return DEFAULT_OUTPUT_SETTINGS[name]
         return self.node.inputs.settings.get("include_" + name, DEFAULT_OUTPUT_SETTINGS[name])
+
+
+def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_suffix=AbacusCalculation._OUTPUT_SUFFIX):
+    """
+    Compose a TrajectoryData node based on the retrieved data
+
+    :param output_folder: A FolderData containing the retrieved files
+    :param data_dict: The `results` dictionary retrieved
+    :param output_suffix: The *suffix* used by AbacusCalculation
+
+    :return: A orm.TrajectoryData Node.
+    """
+    folder_name = output_folder.list_object_names("OUT.aiida" + output_suffix)
+    traj_files = [
+        file_name
+        for file_name in output_folder.list_object_names(folder_name)
+        if re.match(r"STRU_ION\d+_D$", file_name)
+    ]
+    cell_list = []
+    positions_list = []
+    symbols_list = []
+    for traj_file in traj_files:
+        with output_folder.open(folder_name + "/" + traj_file) as fhandle:
+            parser = StruParser(fhandle)
+            cell, positions, species = parser.parse_structure()
+        cell_list.append(cell)
+        positions_list.append(positions)
+        symbols_list.append(species)
+    traj = orm.TrajectoryData()
+    traj.set_trajectory(symbols=symbols_list[0], cells=cell_list, positions=positions_list)
+    # Set additional data
+    if data_dict.get("all_forces"):
+        traj.set_array("forces", np.array(data_dict["all_forces"]))
+        traj.base.attributes.set("force_unit", data_dict["force_unit"])
+    if data_dict.get("energies"):
+        traj.set_array("energies", np.array(data_dict["energies"]))
+    if data_dict.get("all_stresses"):
+        traj.set_array("stresses", np.array(data_dict["stresses"]))
+        traj.base.attributes.set("stress_unit", data_dict["stress_unit"])
+    return traj
