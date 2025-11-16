@@ -147,7 +147,7 @@ def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_su
 
     :return: A orm.TrajectoryData Node.
     """
-    folder_name = output_folder.list_object_names("OUT.aiida" + output_suffix)
+    folder_name = "OUT." + output_suffix
     traj_files = [
         file_name
         for file_name in output_folder.list_object_names(folder_name)
@@ -164,7 +164,7 @@ def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_su
         positions_list.append(positions)
         symbols_list.append(species)
     traj = orm.TrajectoryData()
-    traj.set_trajectory(symbols=symbols_list[0], cells=cell_list, positions=positions_list)
+    traj.set_trajectory(symbols=symbols_list[0], cells=np.array(cell_list), positions=np.array(positions_list))
     # Set additional data
     if data_dict.get("all_forces"):
         traj.set_array("forces", np.array(data_dict["all_forces"]))

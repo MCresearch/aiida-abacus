@@ -79,17 +79,13 @@ class AbacusRawParser(BaseRawParser):
         # Parse the lines one-by-one for general information of the calculation
         self.results["energies"] = []  # Container for the per-ionic-step energies in eV
         for line in self.lines:
-            if "TOTAL-stress" in line:
-                self.results["stress"] = line.strip().split()[1]
-                self.results["stress_unit"] = line.strip().split()[2]
-                if "all_stress" not in self.results:
-                    self.results["all_stress"] = []
-                self.results["all_stress"].append(self.results["stress"])
-                continue
+            if "TOTAL-pressure" in line:
+                self.results["total_pressure"] = float(line.strip().split()[-2])
+                self.results["total_pressure_unit"] = line.strip().split()[-1]
             elif "!FINAL_ETOT_IS" in line:
-                self.results["total_energy"] = line.strip().split()[1]
+                self.results["total_energy"] = float(line.strip().split()[-2])
             elif "final etot is" in line:
-                self.results["energies"].append(line.strip().split()[1])
+                self.results["energies"].append(float(line.strip().split()[-2]))
             elif "NBANDS =" in line:
                 self.results["number_of_bands"] = int(line.strip().split()[-1])
             elif "EFERMI" in line:

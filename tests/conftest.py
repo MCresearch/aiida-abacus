@@ -5,8 +5,11 @@ import pytest
 from aiida import orm
 from aiida.common.exceptions import NotExistent
 from aiida.common.extendeddicts import AttributeDict
+from aiida.common.links import LinkType
 from aiida.engine.utils import instantiate_process
 from aiida.manage.manager import get_manager
+from aiida.orm import CalcJobNode
+from aiida.plugins import DataFactory
 
 TEST_DIR = os.path.dirname(os.path.realpath(__file__))
 pytest_plugins = "aiida.tools.pytest_fixtures"
@@ -174,3 +177,45 @@ def abacus_calc(aiida_profile_clean, abacus_inputs, abacus_code):
     inputs = abacus_inputs(settings, parameters)
 
     return instantiate_process(runner, AbacusCalculation, **inputs)
+
+
+@pytest.fixture()
+def calc_with_retrieved(localhost):
+    """A rigged CalcJobNode for testing the parser and that the calculation retrieve what is expected."""
+
+    def _inner(file_path, parameters=None, settings=None):
+        # Create a test computer
+        computer = localhost
+
+        process_type = "aiida.calculations:abacus.abacus"
+
+        node = CalcJobNode(computer=computer, process_type=process_type)
+        node.base.attributes.set("input_filename", "INPUT")
+        node.base.attributes.set("output_filename", "running_scf.log")
+        node.set_option("resources", {"num_machines": 1, "num_mpiprocs_per_machine": 1})
+        node.set_option("max_wallclock_seconds", 1800)
+
+        settings = settings or {}
+        parameters = parameters or {"input": {"calculation": "scf"}}
+
+        settings = DataFactory("core.dict")(dict=settings)
+        node.base.links.add_incoming(settings, link_type=LinkType.INPUT_CALC, link_label="settings")
+        settings.store()
+
+        # Add parameters input
+        parameters = DataFactory("core.dict")(dict=parameters)
+        node.base.links.add_incoming(parameters, link_type=LinkType.INPUT_CALC, link_label="parameters")
+        parameters.store()
+
+        node.store()
+
+        # Create a `FolderData` that will represent the `retrieved` folder. Store the test
+        # output fixture in there and link it.
+        retrieved = DataFactory("core.folder")()
+        retrieved.base.repository.put_object_from_tree(file_path)
+        retrieved.base.links.add_incoming(node, link_type=LinkType.CREATE, link_label="retrieved")
+        retrieved.store()
+
+        return node
+
+    return _inner
