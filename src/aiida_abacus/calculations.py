@@ -164,6 +164,11 @@ class AbacusCalculation(CalcJob):
             "ERROR_MISSING_OUTPUT_FILES",
             message="Calculation did not produce all expected output files.",
         )
+        spec.exit_code(
+            301,
+            "ERROR_CALCULATION_INCOMPLETE",
+            message="Calculation did not complete successfully - 'Total Time' not found at end of running log.",
+        )
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
         spec.default_output_node = "misc"
 

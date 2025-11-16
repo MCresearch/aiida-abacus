@@ -91,6 +91,9 @@ class AbacusRawParser(BaseRawParser):
             elif "EFERMI" in line:
                 self.results["fermi_level"] = float(line.strip().split()[-2])
 
+        # Check calculation completion status
+        self.results["run_status"] = self.compose_run_status()
+
         self.is_parsed = True
         return self.results
 
@@ -172,6 +175,49 @@ class AbacusRawParser(BaseRawParser):
             eigen_arrays.append(np.stack([eigenvalues[spin][i] for i in range(1, nkpts + 1)], axis=0))
             occ_arrays.append(np.stack([occupations[spin][i] for i in range(1, nkpts + 1)], axis=0))
         return np.stack(eigen_arrays, axis=0), np.stack(occ_arrays, axis=0), kpt_cart
+
+    def compose_run_status(self) -> dict:
+        """
+        Check if the calculation completed successfully by looking for 'Total  Time'
+        at the end of the running log file and compose the run status dictionary.
+
+        :returns: Dictionary with completion status information
+        """
+        run_status = {"completed": False, "completion_marker_found": False, "termination_marker": None}
+
+        try:
+            # Check if we have any lines to analyze
+            if not self.lines:
+                logger.warning("Empty file content provided for completion check")
+                return run_status
+
+            # Get the last few lines to check for completion markers
+            last_lines = self.lines[-10:] if len(self.lines) >= 10 else self.lines
+
+            # Check for ABACUS completion marker
+            completion_marker = "Total  Time"  # ABACUS standard completion marker
+
+            # Check for completion marker in the last lines
+            for line in reversed(last_lines):
+                line_stripped = line.strip()
+
+                # Check for successful completion marker
+                if completion_marker in line_stripped:
+                    run_status["completed"] = True
+                    run_status["completion_marker_found"] = True
+                    run_status["termination_marker"] = completion_marker
+                    logger.info(f"Found completion marker '{completion_marker}' in line: {line_stripped}")
+                    return run_status
+
+            # If no completion marker found, calculation is incomplete
+            logger.warning(f"Completion marker '{completion_marker}' not found in log file")
+
+        except Exception as e:
+            logger.error(f"Error checking calculation completion: {e!s}")
+            run_status["completed"] = False
+            run_status["termination_marker"] = f"error: {e!s}"
+
+        return run_status
 
 
 class BlockParser:

@@ -72,6 +72,14 @@ class AbacusParser(Parser):
         with output_folder.open(main_log, "r") as fhandle:
             raw_parser = AbacusRawParser(fhandle)
         misc_results.update(raw_parser.parse())
+
+        # Check if calculation completed successfully using run_status from raw parser
+        run_status = misc_results.get("run_status", {})
+        if not run_status.get("completed", False):
+            marker = run_status.get("termination_marker", "unknown")
+            self.logger.warning(f"Calculation did not complete successfully. Termination marker: {marker}")
+            return self.exit_codes.ERROR_CALCULATION_INCOMPLETE
+
         misc_node = orm.Dict(dict=misc_results)
 
         # Parse the bands output if requested
