@@ -337,8 +337,9 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     return kpoints
 
 
-def check_pseudo_family(family_name: Union[str, orm.Str]):
+def check_pseudo_family(family_name: Union[str, orm.Str], port=None):
     """Check the existence of a pseudo family"""
+    _ = port
     if isinstance(family_name, orm.Str):
         family_name = family_name.value
     try:
