@@ -1,6 +1,12 @@
 import json
 import pathlib
+import tempfile
 import typing as t
+import zipfile
+from collections import Counter
+from contextlib import contextmanager
+from itertools import chain
+from shutil import rmtree
 
 from aiida import orm
 from aiida.common.exceptions import MultipleObjectsError, NotExistent
@@ -29,12 +35,16 @@ class AtomicOrbitalCollection(orm.Group):
         pp_path = pathlib.Path(repository) / f"{set_name}/Pseudopotential"
         orb_path = pathlib.Path(repository) / f"{set_name}/Orbitals"
         new_nodes = []
-        for path in tqdm(list(pp_path.glob("*.upf")), desc="Scanning elements"):
+        orbital_files = list(orb_path.glob("*/*.orb"))
+        print(f"Number of orbital files found: {len(orbital_files)}")
+        for path in tqdm(chain(pp_path.glob("*.upf"), pp_path.glob("*.UPF")), desc="Scanning elements"):
             element = parse_element(path.read_text())
             # Find the corresponding orbital
             for orb_folder in orb_path.glob(f"{element}_*"):
                 orb_type = orb_folder.name.split("_")[-1].lower()  # Use lowercase dzp/tdzp etc
-                for orb in orb_folder.glob("*.orb"):
+                for orb in orbital_files:
+                    if not orb.stem.startswith(element + "_"):
+                        continue
                     orb_info = parse_orb_filename(orb)
                     orb_node = AtomicOrbitalData.get_or_create(path, orb)
                     orb_element = orb_info.pop("element")
@@ -141,3 +151,103 @@ def parse_orb_filename(filename: FilePath):
         "cut_off_energy_ry": float(tokens[3].replace("Ry", "")),
         "electron_config": tokens[4],
     }
+
+
+class OrbitalFamilyImporter:
+    """
+    A class for importing atomic orbitals and their corresponding pseudopotential data from a folder/archive.
+    A family of atomic orbitals is effectively an one-to-one mapping between elements and AtomicOrbitalData.
+    """
+
+    def __init__(self):
+        """
+        Import a family of orbitals in to the database
+        """
+
+    @classmethod
+    def import_folder(cls, orbital_path, pseudo_path, label, dryrun=False) -> orm.Group:
+        """
+        Import the folder
+        """
+        with temporary_unzip_folder(orbital_path) as orb_path:
+            with temporary_unzip_folder(pseudo_path) as pseudo_path:
+                return cls._import_folders(orb_path, pseudo_path, label, dryrun)
+
+    @staticmethod
+    def _import_folders(
+        orbital_path: pathlib.Path, pseudo_path: pathlib.Path, label: str, dryrun: bool = False
+    ) -> orm.Group:
+        """Inspect and import data"""
+        orbital_files = []
+        upf_files = []
+        for path in orbital_path.rglob("*.orb"):
+            metadata = parse_orb_metadata(path)
+            orbital_files.append([metadata["Element"], path])
+
+        for path in pseudo_path.rglob("*.upf"):
+            element = parse_element(path.read_text())
+            upf_files.append([element, path])
+
+        # Check uniqueness of the elements and each orbital has its related UPF file
+        orbital_counts = Counter(element for element, _ in orbital_files)
+        upf_counts = Counter(element for element, _ in upf_files)
+        for element, count in orbital_counts.items():
+            if count > 1:
+                raise RuntimeError(f"Error: Found {count} orbitals for element {element}!")
+            if upf_counts[element] != 1:
+                raise RuntimeError(f"Error: Found {upf_counts[element]} UPF files for element {element}!")
+
+        # Create AtomicOrbitalData
+        orbitals = {key: value for key, value in orbital_files}
+        upfs = {key: value for key, value in upf_files}
+        orbital_data = []
+        for element, orbital_path in tqdm(orbitals.items(), desc="Orbitals"):
+            if element not in upfs:
+                raise RuntimeError(f"Error: No UPF file found for element {element}!")
+            upf_path = upfs[element]
+            if dryrun:
+                print("Will import AtomicOrbitalData with:\n" f"Orbital: {orbital_path}\n" f"UPF: {upf_path}\n")
+                node = AtomicOrbitalData.get_or_create(upf_path, orbital_path)
+                if node.is_stored:
+                    print(f"Reusing Node {node.pk} already exists in the database")
+                continue
+
+            orbital_data.append(AtomicOrbitalData.get_or_create(upf_path, orbital_path))
+        if dryrun:
+            return
+        # Store and create the family group
+        [node.store() for node in orbital_data]
+        group = AtomicOrbitalFamily.collection.get_or_create(label=label)[0]
+        group.add_nodes(orbital_data)
+        return group
+
+
+@contextmanager
+def temporary_unzip_folder(zippath) -> t.Generator[pathlib.Path, None, None]:
+    """Unzip a zip file to a temporary folder and yield the path to the folder."""
+    if zippath.endswith(".zip"):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with zipfile.ZipFile(zippath, "r") as zip_ref:
+                zip_ref.extractall(tmpdirname)
+            yield pathlib.Path(tmpdirname)
+        rmtree(tmpdirname, ignore_errors=True)
+    else:
+        yield pathlib.Path(zippath)
+
+
+def parse_orb_metadata(path) -> dict[str, str]:
+    """Parse metadata from an orb file"""
+    out = {}
+    with open(path, mode="r") as fhandle:
+        for line in fhandle:
+            if "-----" in line:
+                continue
+            if "SUMMARY" in line and "END" in line:
+                break
+            tokens = line.strip().split()
+            if not tokens:
+                continue
+            value = tokens[-1]
+            key = " ".join(tokens[:-1])
+            out[key] = value
+    return out

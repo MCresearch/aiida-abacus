@@ -179,6 +179,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         self.ctx.inputs.parameters = self.ctx.inputs.parameters.get_dict()
         if "pseudo_family" in self.inputs:
+            # NOTE: cutoff_rho is not used here
             pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
                 self.inputs.abacus.structure, self.inputs.pseudo_family.value
             )
@@ -375,7 +376,8 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
     try:
         family = GroupFactory("pseudo.family.pseudo_dojo")
         cutoffs = GroupFactory("pseudo.family.cutoffs")
-        pseudo_set = (family, cutoffs)
+        normal = GroupFactory("pseudo.family")
+        pseudo_set = (family, cutoffs, normal)
         pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family_name}).one()[0]
     except exceptions.NotExistent as exception:
         raise ValueError(
@@ -383,12 +385,14 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
             "install it."
         ) from exception
 
-    try:
-        cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
-        pseudos = pseudo_family.get_pseudos(structure=structure)
-    except ValueError as exception:
-        raise ValueError(
-            f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
-        ) from exception
-    # TODO - support for SSSP and other families
+    pseudos = pseudo_family.get_pseudos(structure=structure)
+    cutoff_wfc = None
+    cutoff_rho = None
+    if hasattr(pseudo_family, "get_recommended_cutoffs"):
+        try:
+            cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+        except ValueError as exception:
+            raise ValueError(
+                f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
+            ) from exception
     return pseudos, cutoff_wfc, cutoff_rho
