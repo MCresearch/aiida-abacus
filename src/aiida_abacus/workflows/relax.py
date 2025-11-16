@@ -15,6 +15,7 @@ from aiida_abacus.common import (
     RelaxType,
     prepare_process_inputs,
 )
+from aiida_abacus.common.opthold import RelaxOptions, apply_relax_settings_to_abacus_input
 
 from .base import AbacusBaseWorkChain
 
@@ -46,6 +47,9 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
             namespace_options={"required": False, "populate_defaults": False,
                 "help": "Inputs for the `AbacusBaseWorkChain` for the final scf."})
         spec.input("structure", valid_type=orm.StructureData, help="The inputs structure.")
+        spec.input("relax_settings", valid_type=orm.Dict, validator=RelaxOptions.aiida_validate,
+            serializer=RelaxOptions.aiida_serialize, help=RelaxOptions.aiida_description(),
+            required=False)
         spec.input("meta_convergence", valid_type=orm.Bool, default=lambda: orm.Bool(True),
             help="If `True` the workchain will perform a meta-convergence on the cell volume.")
         spec.input("max_meta_convergence_iterations", valid_type=orm.Int, default=lambda: orm.Int(5),
@@ -83,7 +87,15 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
 
     @classmethod
     def get_builder_from_protocol(
-        cls, code, structure, protocol=None, overrides=None, relax_type=RelaxType.POSITIONS_CELL, options=None, **kwargs
+        cls,
+        code,
+        structure,
+        protocol=None,
+        overrides=None,
+        relax_type=RelaxType.POSITIONS_CELL,
+        relax_settings=None,
+        options=None,
+        **kwargs,
     ):
         """Return a builder prepopulated with inputs selected according to the chosen protocol.
 
@@ -92,6 +104,7 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         :param protocol: protocol to use, if not specified, the default will be used.
         :param overrides: optional dictionary of inputs to override the defaults of the protocol.
         :param relax_type: the relax type to use: should be a value of the enum ``common.types.RelaxType``.
+        :param relax_settings: optional ``RelaxOptions`` dictionary to override default relaxation settings.
         :param options: A dictionary of options that will be recursively set for the ``metadata.options`` input of all
             the ``CalcJobs`` that are nested in this work chain.
         :param kwargs: additional keyword arguments that will be passed to the ``get_builder_from_protocol`` of all the
@@ -115,38 +128,20 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         base_final_scf["abacus"].pop("structure", None)
         base_final_scf.pop("clean_workdir", None)
 
-        # Map relaxation types to the corresponding abacus input parameters
-        # See: http://abacus.deepmodeling.com/en/latest/advanced/opt.html#fixing-cell-parameters
-        # for more detail
-        if relax_type is RelaxType.NONE:
-            base.abacus.parameters["input"]["calculation"] = "scf"
-        elif relax_type is RelaxType.POSITIONS:
-            base.abacus.parameters["input"]["calculation"] = "relax"
-        else:
-            # All other kinds quires cell change so it has to be cell-relax
-            base.abacus.parameters["input"]["calculation"] = "cell-relax"
+        # Generate relax_settings from relax_type if not provided
+        if relax_settings is None:
+            # Create RelaxOptions with the specified relax_type
+            relax_options = RelaxOptions(relax_type=relax_type)
+            relax_settings = relax_options.aiida_dict()
 
-        if relax_type is RelaxType.VOLUME:
-            base.abacus.parameters["input"]["fixed_axes"] = "shape"
-            base.abacus.parameters["input"]["fixed_atoms"] = True
-
-        if relax_type is RelaxType.SHAPE:
-            base.abacus.parameters["input"]["fixed_axes"] = "volume"
-            base.abacus.parameters["input"]["fixed_atoms"] = True
-
-        if relax_type is RelaxType.CELL:
-            base.abacus.parameters["input"]["fixed_atoms"] = True
-
-        if relax_type is RelaxType.POSITIONS_SHAPE:
-            base.abacus.parameters["input"]["fixed_axes"] = "volume"
-
-        if relax_type is RelaxType.POSITIONS_VOLUME:
-            base.abacus.parameters["CELL"]["fixed_axes"] = "shape"
+        # Apply relaxation settings using the standalone function
+        apply_relax_settings_to_abacus_input(base.abacus.parameters["input"], relax_settings.get_dict())
 
         builder = cls.get_builder()
         builder.base = base
         builder.base_final_scf = base_final_scf
         builder.structure = structure
+        builder.relax_settings = relax_settings
         builder.clean_workdir = orm.Bool(inputs["clean_workdir"])
         builder.max_meta_convergence_iterations = orm.Int(inputs["max_meta_convergence_iterations"])
         builder.meta_convergence = orm.Bool(inputs["meta_convergence"])
@@ -162,10 +157,23 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         self.ctx.is_converged = False
         self.ctx.iteration = 0
 
+        # Get relax_settings or use defaults
+        if "relax_settings" in self.inputs:
+            self.ctx.relax_settings = self.inputs.relax_settings.get_dict()
+        else:
+            self.ctx.relax_settings = RelaxOptions().model_dump()
+
+        # If relaxation is disabled, set to SCF calculation
+        if not self.ctx.relax_settings.get("perform", True):
+            self.report("Relaxation is disabled in relax_settings, will perform SCF calculation only.")
+
         self.ctx.relax_inputs = AttributeDict(self.exposed_inputs(AbacusBaseWorkChain, namespace="base"))
         self.ctx.relax_inputs.abacus.parameters = self.ctx.relax_inputs.abacus.parameters.get_dict()
 
         self.ctx.relax_inputs.abacus.parameters.setdefault("input", {})
+
+        # Apply relax_settings to ABACUS input parameters using standalone function
+        apply_relax_settings_to_abacus_input(self.ctx.relax_inputs.abacus.parameters["input"], self.ctx.relax_settings)
 
         # Set the meta_convergence and add it to the context
         self.ctx.meta_convergence = self.inputs.meta_convergence.value
@@ -178,6 +186,9 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
                 "No change in volume possible for the provided base input parameters. Meta convergence is turned off."
             )
             self.ctx.meta_convergence = False
+
+        # Use relax_settings convergence parameters if available
+        self.ctx.max_meta_convergence_iterations = self.ctx.relax_settings.get("convergence_max_iterations", 5)
 
         # Add the final scf inputs to the context if a final scf should be run
         if "base_final_scf" in self.inputs:
@@ -204,7 +215,10 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         This is the case as long as the volume change between two consecutive relaxation runs is larger than the volume
         convergence threshold value and the maximum number of meta convergence iterations is not exceeded.
         """
-        return not self.ctx.is_converged and self.ctx.iteration < self.inputs.max_meta_convergence_iterations.value
+        if self.ctx.relax_settings.get("perform", True) is False:
+            return False
+
+        return not self.ctx.is_converged and self.ctx.iteration < self.ctx.max_meta_convergence_iterations
 
     def should_run_final_scf(self):
         """Return whether after successful relaxation a final scf calculation should be run.
