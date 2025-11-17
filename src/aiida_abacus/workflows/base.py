@@ -31,11 +31,13 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
     """
 
     _process_class = AbacusCalculation
+    _protocol_tag = "base"
 
     @classmethod
-    def get_protocol_filepath(cls) -> pathlib.Path:
+    def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
         """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
-        return pathlib.Path(__file__).parent.parent / "protocols/base.yaml"
+        # Use the enhanced ProtocolMixin's get_protocol_filepath method
+        return super().get_protocol_filepath(file_alias)
 
     @classmethod
     def define(cls, spec):

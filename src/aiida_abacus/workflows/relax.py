@@ -34,6 +34,8 @@ def validate_relax_inputs(inputs, _):
 class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
     """WorkChain to relax a structure using Abacus"""
 
+    _protocol_tag = "relax"
+
     @classmethod
     def define(cls, spec):
         """Define the process specification."""
@@ -81,9 +83,10 @@ class AbacusRelaxWorkChain(ProtocolMixin, WorkChain):
         # yapf: enable
 
     @classmethod
-    def get_protocol_filepath(cls) -> pathlib.Path:
+    def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
         """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
-        return pathlib.Path(__file__).parent.parent / "protocols/relax.yaml"
+        # Use the enhanced ProtocolMixin's get_protocol_filepath method
+        return super().get_protocol_filepath(file_alias)
 
     @classmethod
     def get_builder_from_protocol(

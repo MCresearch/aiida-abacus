@@ -1,0 +1,66 @@
+# The Preset contains mostly code-specific settings controlling the
+# execution of calculations
+name: default
+default_protocol: balanced
+default_code: abacus@localhost
+default_options:
+  resources:
+    num_machines: 1
+    tot_num_mpiprocs: 1
+  max_wallclock_seconds: 3600
+  withmpi: true
+
+# Code specific options
+code_specific:
+  "abacus@localhost":
+    options:
+      max_wallclock_seconds: 3600
+      resources:
+        tot_num_mpiprocs: 1
+        num_machines: 1
+      withmpi: true
+    settings: {}
+    parameters:
+      input:
+        ecutwfc: 60.0
+        scf_thr: 1e-7
+        smearing_sigma: 0.015
+        scf_nmax: 100
+        device: cpu
+        ks_solver: dav_subspace
+        precision: double
+
+  "abacus@cluster":
+    options:
+      max_wallclock_seconds: 7200
+      resources:
+        tot_num_mpiprocs: 8
+        num_machines: 2
+      withmpi: true
+    settings: {}
+    parameters:
+      input:
+        ecutwfc: 80.0
+        scf_thr: 5e-8
+        smearing_sigma: 0.01
+        scf_nmax: 150
+        device: cpu
+        ks_solver: dav_subspace
+        precision: double
+
+# Default settings for specific workflow types
+default_relax_settings:
+  perform: true
+  relaxation_method: "cg"
+  force_cutoff: 1e-3
+  stress_cutoff: 0.5
+  max_steps: 100
+
+default_band_settings:
+  run_bands: true
+  run_dos: false
+  band_mode: "seekpath-aiida"
+  band_kpoints_distance: 0.025
+  dos_kpoints_distance: 0.15
+  symprec: 1e-5
+  line_density: 20
