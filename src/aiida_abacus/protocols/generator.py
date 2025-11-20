@@ -208,10 +208,49 @@ class BaseInputGenerator:
             self._update_dict_node(port, updates, dict_node=node, namespace=namespace)
         return self
 
+    def set_input(self, input_updates=None, update_all=True, ports=None, **kwargs):
+        """
+        Set input dictionary in parameters node (equivalent to set_incar in VASP)
+
+        This method specifically updates the "input" section of ABACUS parameters,
+        similar to how set_incar updates the INCAR parameters in VASP.
+
+        :param input_updates: Dictionary of input parameters to update
+        :param update_all: Whether to update all ports or specific ones
+        :param ports: Specific ports to update (if update_all=False)
+        :param kwargs: Direct input parameter key-value pairs
+        :return: Self for method chaining
+        """
+        updates = deepcopy(input_updates or {})
+        updates.update(kwargs)
+
+        if not updates:
+            return self
+
+        if self.builder is None:
+            raise AttributeError("Builder has not been initialized. Call get_builder() first.")
+
+        if update_all:
+            ports_nodes = recursive_search_dict_with_key(self.builder, "input")
+        else:
+            ports = ports or ["parameters"]
+            ports_nodes = [[port, self._get_port_node(port)] for port in ports]
+
+        for port, node in ports_nodes:
+            self._update_dict_node(port, updates, dict_node=node, namespace="input")
+        return self
+
     def set_options(self, option_updates=None, ports=None, update_all=True, **kwargs):
         """Set the options input port"""
-        if option_updates is None and not kwargs:
+        updates = option_updates or {}
+        updates = recursive_merge(updates, kwargs)
+
+        if not updates:
             return self
+
+        if self.builder is None:
+            raise AttributeError("Builder has not been initialized. Call get_builder() first.")
+
         if update_all:
             calc_namespaces = []
             for port, namespace in recursive_search_port_basename(self.builder, "abacus"):
@@ -220,24 +259,24 @@ class BaseInputGenerator:
         else:
             ports = ports or ["abacus"]
             calc_namespaces = [[port, self._get_port_node(port)] for port in ports]
-        updates = option_updates or {}
-        # Use recursive merge so existing nested keys will not be replaced
-        updates = recursive_merge(updates, kwargs)
-        # Update the options
+
         for port, namespace in calc_namespaces:
             # Here the port is only updated if the parent namespace is not empty or it is marked as 'required'
-            # This is because `options`` is a special none-db port which may exist even if 'populate_defaults' is
-            # set to False for namespaces that is optional. Otherwise, these optional namespace becomes 'defined'
-            # , triggering its validation and then fails (as other 'required' fields are not defined inside the
-            # namespace)
             if has_content(namespace) or namespace._port_namespace._required:
                 namespace["metadata"]["options"] = recursive_merge(dict(namespace["metadata"]["options"]), updates)
         return self
 
     def set_resources(self, resources_updates=None, ports=None, update_all=True, **kwargs):
         """Set the resources input port"""
-        if resources_updates is None and not kwargs:
+        updates = deepcopy(resources_updates or {})
+        updates.update(kwargs)
+
+        if not updates:
             return self
+
+        if self.builder is None:
+            raise AttributeError("Builder has not been initialized. Call get_builder() first.")
+
         if update_all:
             calc_namespaces = []
             for port, namespace in recursive_search_port_basename(self.builder, "abacus"):
@@ -246,9 +285,7 @@ class BaseInputGenerator:
         else:
             ports = ports or ["abacus"]
             calc_namespaces = [[port, self._get_port_node(port)] for port in ports]
-        # Update the resources
-        updates = deepcopy(resources_updates or {})
-        updates.update(kwargs)
+
         for port, namespace in calc_namespaces:
             # Here the port is only updated if the parent namespace is not empty or it is marked as 'required'
             if has_content(namespace) or namespace._port_namespace._required:

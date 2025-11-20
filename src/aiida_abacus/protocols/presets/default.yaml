@@ -20,16 +20,8 @@ code_specific:
         num_machines: 1
       withmpi: true
     settings: {}
-    parameters:
-      input:
-        ecutwfc: 60.0
-        scf_thr: 1e-7
-        smearing_sigma: 0.015
-        scf_nmax: 100
-        device: cpu
-        ks_solver: dav_subspace
-        precision: double
 
+# Example code specific settings
   "abacus@cluster":
     options:
       max_wallclock_seconds: 7200

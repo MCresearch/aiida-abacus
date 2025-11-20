@@ -53,6 +53,7 @@ def abacus_code(localhost):
     code.label = "abacus"
     code.description = "abacus code"
     code.default_calc_job_plugin = "abacus.abacus"
+    code.store()
     return code
 
 
@@ -114,6 +115,19 @@ def pseudo_familty(aiida_profile_clean, data_folder):
 
     family = PseudoPotentialFamily.create_from_folder(data_folder / "pseudos", "aiida-abacus-test", pseudo_type=UpfData)
     return family
+
+
+@pytest.fixture
+def pseudo_family_v2(aiida_profile_clean, data_folder):
+    """
+    Create a Pseudopotential Family namded apns-efficiency-test
+    The group contains pseudopotentials for Si, Mg, O
+    """
+    from aiida.orm import load_group
+    from aiida.tools.archive import import_archive
+
+    import_archive(data_folder / "pseudos.aiida")
+    return load_group("apns-efficiency-test")
 
 
 @pytest.fixture()

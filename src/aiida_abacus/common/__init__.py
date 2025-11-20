@@ -100,6 +100,11 @@ class ProtocolMixin:
         # Use the default name
         if file_alias is None:
             file_alias = cls._protocol_tag
+            # Load the default protocol
+            default_path = pathlib.Path(__file__).parent.parent / f"protocols/{cls._protocol_tag}.yaml"
+            if not default_path.exists():
+                raise FileNotFoundError(f"Protocol file not found at {default_path}. Please ensure it exists.")
+            return default_path
         else:
             file_alias = str(file_alias)
         # Return the path if it points to a file
@@ -109,11 +114,7 @@ class ProtocolMixin:
         user_path = pathlib.Path(f"{cls._load_root}/{cls._protocol_tag}/{file_alias}.yaml").expanduser()
         if user_path.is_file():
             return user_path
-        # Load the default protocol
-        default_path = pathlib.Path(__file__).parent.parent / f"protocols/{cls._protocol_tag}.yaml"
-        if not default_path.exists():
-            raise FileNotFoundError(f"Protocol file not found at {default_path}. Please ensure it exists.")
-        return default_path
+        raise FileNotFoundError(f"Cannot resolve {file_alias} to a valid protocol file.")
 
     @classmethod
     def get_default_protocol(cls) -> str:
@@ -171,7 +172,7 @@ class ProtocolMixin:
                     "protocols."
                 ) from exception
         inputs = recursive_merge(data["default_inputs"], protocol_inputs)
-        inputs.pop("description")
+        inputs.pop("description", None)
 
         if isinstance(overrides, pathlib.Path):
             with overrides.open() as file:
