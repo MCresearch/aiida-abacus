@@ -1,0 +1,42 @@
+default_inputs:
+    clean_workdir: False
+    kpoints_distance: 0.15
+    kpoints_force_parity: False
+    max_iterations: 5
+    pseudo_family: 'PseudoDojo/0.4/PBE/SR/standard/upf'
+    meta_parameters:
+      conv_thr_per_atom: 0.2e-9
+      etot_conv_thr_per_atom: 1.e-5
+    abacus:
+        metadata:
+            options:
+                resources:
+                    num_machines: 1
+                max_wallclock_seconds: 43200  # Twelve hours
+                withmpi: True
+        parameters:
+            input:
+              calculation: scf
+              symmetry: 1
+              basis_type: pw
+              ecutwfc: 60.0
+              scf_thr: 1e-7
+              force_thr: 1e-3
+              stress_thr: 0.5
+              cal_force: True
+              cal_stress: True
+              smearing_sigma: 0.015
+              scf_nmax: 100
+              device: cpu
+              ks_solver: dav_subspace
+              precision: double
+
+
+protocols:
+    balanced:
+      abacus:
+        parameters:
+          input:
+            encut_wfc: 101
+      pseudo_family: apns-efficiency-test
+ 
