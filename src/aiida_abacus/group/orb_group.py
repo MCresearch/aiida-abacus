@@ -34,36 +34,69 @@ class AtomicOrbitalCollection(orm.Group):
         Import a specific subset of the orbitals
         """
 
-        pp_path = pathlib.Path(repository) / f"{set_name}/Pseudopotential"
-        orb_path = pathlib.Path(repository) / f"{set_name}/Orbitals"
+        # Handle both structured repository and flat repository formats
+        repo_path = pathlib.Path(repository)
+
+        # Try structured format first: repository/set_name/Pseudopotential
+        pp_path = repo_path / f"{set_name}/Pseudopotential"
+        orb_path = repo_path / f"{set_name}/Orbitals"
+
+        # If structured format doesn't exist, try flat format: repository/Pseudopotential
+        if not pp_path.exists():
+            pp_path = repo_path / "Pseudopotential"
+            orb_path = repo_path / "Orbitals"
+
+        if not pp_path.exists():
+            raise NotExistent(f"Pseudopotential directory not found: {pp_path}")
+        if not orb_path.exists():
+            raise NotExistent(f"Orbitals directory not found: {orb_path}")
+
         new_nodes = []
-        orbital_files = list(orb_path.glob("*/*.orb"))
+        orbital_files = list(orb_path.glob("*.orb")) + list(orb_path.glob("*/*.orb"))
         print(f"Number of orbital files found: {len(orbital_files)}")
+
         for path in tqdm(chain(pp_path.glob("*.upf"), pp_path.glob("*.UPF")), desc="Scanning elements"):
             element = parse_element(path.read_text())
-            # Find the corresponding orbital
-            for orb_folder in orb_path.glob(f"{element}_*"):
-                orb_type = orb_folder.name.split("_")[-1].lower()  # Use lowercase dzp/tdzp etc
-                for orb in orbital_files:
-                    if not orb.stem.startswith(element + "_"):
-                        continue
+
+            # Find the corresponding orbital files for this element
+            for orb in orbital_files:
+                if not orb.stem.lower().startswith(element.lower() + "_"):
+                    continue
+
+                # Extract orbital type from filename (e.g., Si_gga_7au_100Ry_2s2p1d.orb -> gga)
+                try:
                     orb_info = parse_orb_filename(orb)
-                    orb_node = AtomicOrbitalData.get_or_create(path, orb)
-                    orb_element = orb_info.pop("element")
-                    orb_info["orbital_type"] = orb_type
-                    assert element == orb_element, "Orbital element does not match that of the pseudopotential"
-                    orb_node.base.attributes.set_many(orb_info)
-                    new_nodes.append(orb_node)
+                    orb_type = orb_info.get("functional", "unknown").lower()
+                except AssertionError:
+                    # If filename doesn't match expected pattern, skip it
+                    print(f"Warning: Skipping orbital file with unexpected name format: {orb.name}")
+                    continue
+
+                orb_node = AtomicOrbitalData.get_or_create(path, orb)
+                orb_element = orb_info.pop("element")
+                orb_info["orbital_type"] = orb_type
+                assert (
+                    element.lower() == orb_element.lower()
+                ), f"Orbital element '{orb_element}' does not match pseudopotential element '{element}'"
+                orb_node.base.attributes.set_many(orb_info)
+                new_nodes.append(orb_node)
+                break  # Found matching orbital, move to next pseudopotential
+
         print(f"About to import {len(new_nodes)} nodes")
         group_label = group_label if group_label is not None else set_name
+
+        if dryrun:
+            print("Dry run, not storing any nodes or creating group")
+            return None
+
         group = cls.collection.get_or_create(label=group_label)[0]
         print(f"Number of existing nodes in group {group_label}: {group.count()}")
-        if not dryrun:
-            for node in tqdm(new_nodes, desc="Storing nodes"):
-                node.store()
-            group.add_nodes(new_nodes)
-        else:
-            print("Dry run, not storing any nodes")
+
+        for node in tqdm(new_nodes, desc="Storing nodes"):
+            node.store()
+        group.add_nodes(new_nodes)
+
+        return group
 
     def get_orbital(
         self, element: str, orbital_type: str, rcut: float, cut_off_energy=None, electron_config=None, functional=None
@@ -94,9 +127,20 @@ class AtomicOrbitalCollection(orm.Group):
         try:
             node = q.one()[0]
         except MultipleObjectsError as _:
-            raise MultipleObjectsError("More than one orbital found for the given parameters")
+            raise MultipleObjectsError(
+                f"More than one orbital found for element={element}, " f"orbital_type={orbital_type}, rcut={rcut}"
+            )
         except NotExistent as _:
-            raise NotExistent("No orbital found for the given parameters")
+            # Provide more detailed error message
+            available_elements = set()
+            for node in self.nodes:
+                attrs = node.base.attributes.all
+                available_elements.add(attrs.get("element", "Unknown"))
+
+            raise NotExistent(
+                f"No orbital found for element={element}, orbital_type={orbital_type}, rcut={rcut}. "
+                f"Available elements: {sorted(available_elements)}"
+            )
         return node
 
     def create_family(self, family_label, orbital_type, rcuts_dict: t.Union[dict, str]):
@@ -115,19 +159,24 @@ class AtomicOrbitalCollection(orm.Group):
         for element in tqdm(elements, desc="Processing element"):
             rcut = rcuts_dict.get(element)
             if rcut is None:
+                if "Other" not in rcuts_dict:
+                    raise NotExistent(
+                        f"No rcut specified for element '{element}' and no 'Other' fallback found in rcuts_dict"
+                    )
                 rcut = rcuts_dict["Other"]
             orb = None
-            # Find suitable cut off distance
-            while rcut <= 12:
+            # Find suitable cut off distance with reasonable bounds
+            max_rcut = 20.0  # Set reasonable upper bound
+            while rcut <= max_rcut:
                 try:
                     orb = self.get_orbital(element, orbital_type, rcut)
                 except NotExistent as _:
-                    print(f"No orbital found for {element} with rcut {rcut},  trying increasing it by 1")
+                    print(f"No orbital found for {element} with rcut {rcut}, trying increasing it by 1")
                     rcut += 1
                 if orb is not None:
                     break
             if orb is None:
-                raise NotExistent(f"No orbital found for {element} with rcut {rcut}")
+                raise NotExistent(f"No orbital found for {element} with rcut up to {max_rcut}")
             orbs.append(orb)
         family = AtomicOrbitalFamily(label=family_label)
         family.store()
@@ -229,24 +278,30 @@ class OrbitalFamilyImporter:
         upf_files = []
 
         # Find all orbital files and extract element information
+        # Find all orbital files and extract element information
+        for path in orbital_path.rglob("*.orb"):
+            try:
+                metadata = parse_orb_metadata(path)
+                element = metadata.get("Element", "").strip()
+                if element:
+                    orbital_files.append([element, path])
+                else:
+                    log_warning(f"No element found in orbital metadata for {path}")
+            except Exception as e:
+                log_warning(f"Failed to parse orbital metadata from {path}: {e}")
+                continue
         if variant_choices:
-            # Use the user-selected variants
-            log_info(f"Using {len(variant_choices)} pre-selected orbital variants")
-            for element, path in variant_choices.items():
-                orbital_files.append([element, Path(path)])
-        else:
-            # Find all orbital files and extract element information
-            for path in orbital_path.rglob("*.orb"):
-                try:
-                    metadata = parse_orb_metadata(path)
-                    element = metadata.get("Element", "").strip()
-                    if element:
-                        orbital_files.append([element, path])
-                    else:
-                        log_warning(f"No element found in orbital metadata for {path}")
-                except Exception as e:
-                    log_warning(f"Failed to parse orbital metadata from {path}: {e}")
-                    continue
+            selected = []
+            # Find matching elements
+            for element, path in orbital_files:
+                # Find if this element has a variant choice
+                if element in variant_choices:
+                    if Path(variant_choices[element]).resolve() == Path(path).resolve():
+                        # Only select if paths match if the element exists in the variant choices
+                        selected.append([element, Path(path)])
+                else:
+                    selected.append([element, path])
+            orbital_files = selected
 
         # Find all UPF files with both case patterns and extract element information
         for path in chain(

@@ -264,7 +264,7 @@ def mg_orbital_data(aiida_profile_clean, data_folder):
     from aiida_abacus.data.orbital import AtomicOrbitalData
     from aiida_abacus.group.orb_group import parse_orb_filename
 
-    pseudo_file = data_folder / "pseudos" / "Si.upf"  # Reuse Si pseudo for testing
+    pseudo_file = data_folder / "pseudos" / "Mg.PD04.PBE.UPF"
     orbital_file = data_folder / "orbitals" / "Mg_gga_9au_100Ry_2s1p.orb"
     orb_node = AtomicOrbitalData(pseudo_file, orbital_file)
 
@@ -282,7 +282,7 @@ def o_orbital_data(aiida_profile_clean, data_folder):
     from aiida_abacus.data.orbital import AtomicOrbitalData
     from aiida_abacus.group.orb_group import parse_orb_filename
 
-    pseudo_file = data_folder / "pseudos" / "Si.upf"  # Reuse Si pseudo for testing
+    pseudo_file = data_folder / "pseudos" / "O.upf"
     orbital_file = data_folder / "orbitals" / "O_gga_6au_100Ry_2s2p1d.orb"
     orb_node = AtomicOrbitalData(pseudo_file, orbital_file)
 
