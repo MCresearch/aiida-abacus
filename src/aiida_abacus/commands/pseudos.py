@@ -188,7 +188,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool) -> No
 
     # Download file if not cached or force download is requested
     if not cache_file.exists() or force_download:
-        echo.echo_info(f"Downloading {name} from {url}...")
+        echo.echo(f"Downloading {name} from {url}...")
 
         with cli_spinner():
             try:
@@ -202,10 +202,10 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool) -> No
 
         echo.echo_success(f"Downloaded to {cache_file}")
     else:
-        echo.echo_info(f"Using cached file: {cache_file}")
+        echo.echo(f"Using cached file: {cache_file}")
 
     # Verify MD5 checksum
-    echo.echo_info("Verifying MD5 checksum...")
+    echo.echo("Verifying MD5 checksum...")
     if not verify_md5(cache_file, expected_md5):
         if not force_download and cache_file.exists():
             echo.echo_warning("MD5 checksum verification failed. The file may be corrupted.")
@@ -447,72 +447,65 @@ def list_families() -> None:
 @with_dbenv()
 def show_family(family_label: str) -> None:
     """Show detailed information about a specific orbital family, including pseudopotentials and orbitals."""
-    try:
-        # Find the family
-        qb = QueryBuilder()
-        qb.append(AtomicOrbitalFamily, filters={"label": family_label})
-        family_result = qb.first()
+    # Find the family
+    qb = QueryBuilder()
+    qb.append(AtomicOrbitalFamily, filters={"label": family_label})
+    family_result = qb.first()
 
-        if not family_result:
-            echo.echo_error(f"Family '{family_label}' not found.")
-            echo.echo_info("Available families:")
-            qb_all = QueryBuilder()
-            qb_all.append(AtomicOrbitalFamily, project=["label"])
-            for (label,) in qb_all.all():
-                echo.echo(f"  {label}")
-            return
+    if not family_result:
+        echo.echo_error(f"Family '{family_label}' not found.")
+        echo.echo_info("Available families:")
+        qb_all = QueryBuilder()
+        qb_all.append(AtomicOrbitalFamily, project=["label"])
+        for (label,) in qb_all.all():
+            echo.echo(f"  {label}")
+        raise click.Abort()
 
-        family = family_result[0]
+    family = family_result[0]
 
-        # Get description and variant choices if available
-        description = getattr(family, "description", "No description available")
-        variant_choices = family.base.extras.get("variant_choices", {})
+    # Get description and variant choices if available
+    description = getattr(family, "description", "No description available")
+    variant_choices = family.base.extras.get("variant_choices", {})
 
-        echo.echo_info(f"Family: {family_label}")
-        echo.echo(f"Description: {description}")
-        echo.echo(f"Number of orbitals: {family.count()}")
+    echo.echo(f"Family: {family_label}")
+    echo.echo(f"Description: {description}")
+    echo.echo(f"Number of orbitals: {family.count()}")
 
-        if variant_choices:
-            echo.echo_info(f"Variant choices stored: {len(variant_choices)} elements")
-            echo.echo("  Selected orbital files:")
-            for element, filename in sorted(variant_choices.items()):
-                echo.echo(f"    {element}: {filename}")
-        echo.echo("")
+    if variant_choices:
+        echo.echo(f"Variant choices stored: {len(variant_choices)} elements")
+        echo.echo("  Selected orbital files:")
+        for element, filename in sorted(variant_choices.items()):
+            echo.echo(f"    {element}: {filename}")
+    echo.echo("")
 
-        # Get all orbital data nodes in the family
-        qb_orbitals = QueryBuilder()
-        qb_orbitals.append(AtomicOrbitalFamily, filters={"label": family_label})
-        qb_orbitals.append(aiida_orm.Data, with_group=AtomicOrbitalFamily)
+    # Get all orbital data nodes in the family
+    qb_orbitals = QueryBuilder()
+    qb_orbitals.append(AtomicOrbitalFamily, filters={"label": family_label})
+    qb_orbitals.append(aiida_orm.Data, with_group=AtomicOrbitalFamily)
 
-        orbitals = qb_orbitals.all()
+    orbitals = qb_orbitals.all()
 
-        if not orbitals:
-            echo.echo_warning("No orbitals found in this family.")
-            return
+    if not orbitals:
+        echo.echo_warning("No orbitals found in this family.")
+        return
 
-        # Prepare data for table
-        table_data = []
-        for (orbital_node,) in orbitals:
-            # Get orbital attributes
-            element = orbital_node.base.attributes.get("element", "Unknown")
-            orbital_filename = orbital_node.base.attributes.get("filename_second", "Unknown")
-            upf_filename = orbital_node.base.attributes.get("filename", "Unknown")
+    # Prepare data for table
+    table_data = []
+    for (orbital_node,) in orbitals:
+        # Get orbital attributes
+        element = orbital_node.base.attributes.get("element", "Unknown")
+        orbital_filename = orbital_node.base.attributes.get("filename_second", "Unknown")
+        upf_filename = orbital_node.base.attributes.get("filename", "Unknown")
 
-            table_data.append([str(orbital_node.pk), element, orbital_filename, upf_filename])
+        table_data.append([str(orbital_node.pk), element, orbital_filename, upf_filename])
 
-        # Sort by element for better readability
-        table_data.sort(key=lambda x: x[1])
+    # Sort by element for better readability
+    table_data.sort(key=lambda x: x[1])
 
-        # Display the table using tabulate
-        echo.echo_info("Orbital and pseudopotential details:")
-        headers = ["PK", "Element", "Orbital File", "Pseudopotential File"]
-        echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
+    # Display the table using tabulate
+    echo.echo_info("Orbital and pseudopotential details:")
+    headers = ["PK", "Element", "Orbital File", "Pseudopotential File"]
+    echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
 
-        echo.echo("")
-        echo.echo_info(f"Total: {len(orbitals)} elements in family")
-
-    except Exception as e:
-        echo.echo_error(f"Failed to show family '{family_label}': {e}")
-        import traceback
-
-        echo.echo_debug(f"Error details: {traceback.format_exc()}")
+    echo.echo("")
+    echo.echo_info(f"Total: {len(orbitals)} elements in family")
