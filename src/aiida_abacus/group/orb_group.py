@@ -391,7 +391,8 @@ class OrbitalFamilyImporter:
 @contextmanager
 def temporary_unzip_folder(zippath) -> t.Generator[pathlib.Path, None, None]:
     """Unzip a zip file to a temporary folder and yield the path to the folder."""
-    if zippath.endswith(".zip"):
+    zippath = Path(zippath)
+    if zippath.suffix == ".zip":
         with tempfile.TemporaryDirectory() as tmpdirname:
             with zipfile.ZipFile(zippath, "r") as zip_ref:
                 zip_ref.extractall(tmpdirname)

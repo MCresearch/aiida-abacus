@@ -245,6 +245,137 @@ def si_orbital_file(data_folder):
 def atomic_orbital_data(aiida_profile_clean, data_folder, si_orbital_file):
     """Create AtomicOrbitalData instance for testing."""
     from aiida_abacus.data.orbital import AtomicOrbitalData
+    from aiida_abacus.group.orb_group import parse_orb_filename
 
     pseudo_file = data_folder / "pseudos" / "Si.upf"
-    return AtomicOrbitalData(pseudo_file, si_orbital_file)
+    orb_node = AtomicOrbitalData(pseudo_file, si_orbital_file)
+
+    # Parse orbital info from filename and set attributes
+    orb_info = parse_orb_filename(si_orbital_file)
+    orb_info["orbital_type"] = "dzp"  # Default orbital type for testing
+    orb_node.base.attributes.set_many(orb_info)
+
+    return orb_node
+
+
+@pytest.fixture
+def mg_orbital_data(aiida_profile_clean, data_folder):
+    """Create Mg AtomicOrbitalData instance for testing."""
+    from aiida_abacus.data.orbital import AtomicOrbitalData
+    from aiida_abacus.group.orb_group import parse_orb_filename
+
+    pseudo_file = data_folder / "pseudos" / "Si.upf"  # Reuse Si pseudo for testing
+    orbital_file = data_folder / "orbitals" / "Mg_gga_9au_100Ry_2s1p.orb"
+    orb_node = AtomicOrbitalData(pseudo_file, orbital_file)
+
+    # Parse orbital info from filename and set attributes
+    orb_info = parse_orb_filename(orbital_file)
+    orb_info["orbital_type"] = "dzp"  # Default orbital type for testing
+    orb_node.base.attributes.set_many(orb_info)
+
+    return orb_node
+
+
+@pytest.fixture
+def o_orbital_data(aiida_profile_clean, data_folder):
+    """Create O AtomicOrbitalData instance for testing."""
+    from aiida_abacus.data.orbital import AtomicOrbitalData
+    from aiida_abacus.group.orb_group import parse_orb_filename
+
+    pseudo_file = data_folder / "pseudos" / "Si.upf"  # Reuse Si pseudo for testing
+    orbital_file = data_folder / "orbitals" / "O_gga_6au_100Ry_2s2p1d.orb"
+    orb_node = AtomicOrbitalData(pseudo_file, orbital_file)
+
+    # Parse orbital info from filename and set attributes
+    orb_info = parse_orb_filename(orbital_file)
+    orb_info["orbital_type"] = "dzp"  # Default orbital type for testing
+    orb_node.base.attributes.set_many(orb_info)
+
+    return orb_node
+
+
+@pytest.fixture
+def atomic_orbital_collection(aiida_profile_clean, atomic_orbital_data, mg_orbital_data, o_orbital_data):
+    """Create AtomicOrbitalCollection with sample data."""
+    from aiida_abacus.group.orb_group import AtomicOrbitalCollection
+
+    # Store the data nodes first
+    atomic_orbital_data.store()
+    mg_orbital_data.store()
+    o_orbital_data.store()
+
+    collection = AtomicOrbitalCollection(label="test-orbital-collection")
+    collection.store()
+    collection.add_nodes([atomic_orbital_data, mg_orbital_data, o_orbital_data])
+    return collection
+
+
+@pytest.fixture
+def si_orbital_family(aiida_profile_clean, atomic_orbital_data):
+    """Create a sample AtomicOrbitalFamily with Si orbital."""
+    from aiida_abacus.group.orb_group import AtomicOrbitalFamily
+
+    # Store the data node first
+    atomic_orbital_data.store()
+
+    family = AtomicOrbitalFamily(label="test-si-orbital-family")
+    family.store()
+    family.add_nodes([atomic_orbital_data])
+    return family
+
+
+@pytest.fixture
+def multi_element_family(aiida_profile_clean, atomic_orbital_data, mg_orbital_data):
+    """Create AtomicOrbitalFamily with multiple elements."""
+    from aiida_abacus.group.orb_group import AtomicOrbitalFamily
+
+    # Store the data nodes first
+    atomic_orbital_data.store()
+    mg_orbital_data.store()
+
+    family = AtomicOrbitalFamily(label="test-multi-element-family")
+    family.store()
+    family.add_nodes([atomic_orbital_data, mg_orbital_data])
+    return family
+
+
+@pytest.fixture
+def structured_orbital_repo(tmp_path, data_folder):
+    """Create structured repository layout for import testing."""
+    import shutil
+
+    # Create repository structure
+    repo_dir = tmp_path / "test_orbital_repo"
+    pseudo_dir = repo_dir / "Pseudopotential"
+    orbital_dir = repo_dir / "Orbitals"
+
+    pseudo_dir.mkdir(parents=True)
+    orbital_dir.mkdir(parents=True)
+
+    # Copy pseudopotential files
+    shutil.copy(data_folder / "pseudos" / "Si.upf", pseudo_dir / "Si.upf")
+    shutil.copy(data_folder / "pseudos" / "Mg.PD04.PBE.UPF", pseudo_dir / "Mg.PD04.PBE.UPF")
+    shutil.copy(data_folder / "pseudos" / "O.upf", pseudo_dir / "O.upf")
+
+    # Copy orbital files to flat Orbitals directory
+    shutil.copy(data_folder / "orbitals" / "Si_gga_7au_100Ry_2s2p1d.orb", orbital_dir)
+    shutil.copy(data_folder / "orbitals" / "Mg_gga_9au_100Ry_2s1p.orb", orbital_dir)
+    shutil.copy(data_folder / "orbitals" / "O_gga_6au_100Ry_2s2p1d.orb", orbital_dir)
+
+    return repo_dir
+
+
+@pytest.fixture
+def sample_orbital_archive(tmp_path, structured_orbital_repo):
+    """Create sample ZIP archive for import testing."""
+    import zipfile
+
+    archive_path = tmp_path / "test_orbitals.zip"
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for file_path in structured_orbital_repo.rglob("*"):
+            if file_path.is_file():
+                arcname = file_path.relative_to(structured_orbital_repo.parent)
+                zipf.write(file_path, arcname)
+
+    return archive_path
