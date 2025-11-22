@@ -118,7 +118,7 @@ def pseudo_familty(aiida_profile_clean, data_folder):
 
 
 @pytest.fixture
-def pseudo_family_v2(aiida_profile_clean, data_folder):
+def pseudo_family_v2(aiida_profile, data_folder):
     """
     Create a Pseudopotential Family namded apns-efficiency-test
     The group contains pseudopotentials for Si, Mg, O
@@ -233,3 +233,18 @@ def calc_with_retrieved(localhost):
         return node
 
     return _inner
+
+
+@pytest.fixture
+def si_orbital_file(data_folder):
+    """Path to sample Si orbital file"""
+    return data_folder / "orbitals" / "Si_gga_7au_100Ry_2s2p1d.orb"
+
+
+@pytest.fixture
+def atomic_orbital_data(aiida_profile_clean, data_folder, si_orbital_file):
+    """Create AtomicOrbitalData instance for testing."""
+    from aiida_abacus.data.orbital import AtomicOrbitalData
+
+    pseudo_file = data_folder / "pseudos" / "Si.upf"
+    return AtomicOrbitalData(pseudo_file, si_orbital_file)
