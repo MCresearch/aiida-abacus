@@ -239,8 +239,7 @@ def verify_md5(filepath: Path, expected_md5: str) -> bool:
     is_flag=True,
     default=False,
     help=(
-        "Import as collections only (recommended). "
-        "Use 'create-family' afterwards to create calculation-ready families."
+        "Import as collections only (recommended). Use 'create-family' afterwards to create calculation-ready families."
     ),
 )
 @with_dbenv()
@@ -278,7 +277,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool, colle
 
     # Legacy behavior: direct family creation with variant selection
     echo.echo_warning(
-        "Using legacy family creation mode. " "Consider using --collection-only flag for more flexible workflow."
+        "Using legacy family creation mode. Consider using --collection-only flag for more flexible workflow."
     )
 
     if name not in KNOWN_SETS:
@@ -444,9 +443,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool, colle
                     needs_uuid_prefix = False
 
                     if has_variants and not dry_run:
-                        echo.echo(
-                            "Multiple orbital variants found - launching interactive selection" f"for {family_name}"
-                        )
+                        echo.echo(f"Multiple orbital variants found - launching interactive selectionfor {family_name}")
                         selected_orbitals, manual_selection = select_orbital_variants(element_orbitals)
 
                         # Store variant choices for group extras
@@ -629,7 +626,7 @@ def list_collections() -> None:
 
         if not collections:
             echo.echo_info(
-                "No orbital collections found. " "Use 'aiida-abacus pseudos install-collection' to import some."
+                "No orbital collections found. Use 'aiida-abacus pseudos install-collection' to import some."
             )
             return
 
@@ -724,44 +721,36 @@ def show_collection(collection_label: str) -> None:
 
     for count in sorted(by_count.keys(), reverse=True):
         elements = sorted(by_count[count])
+        if count == 1:
+            continue
         echo.echo(f"  {count} variant(s): {', '.join(elements)}")
 
     echo.echo("")
 
-    # Show detailed orbital list (paginated if too many)
-    if collection.count() <= 50:
-        # Get all orbital data nodes in the collection
-        qb_orbitals = QueryBuilder()
-        qb_orbitals.append(AtomicOrbitalCollection, filters={"label": collection_label})
-        qb_orbitals.append(aiida_orm.Data, with_group=AtomicOrbitalCollection)
+    # Get all orbital data nodes in the collection
+    qb_orbitals = QueryBuilder()
+    qb_orbitals.append(AtomicOrbitalCollection, filters={"label": collection_label})
+    qb_orbitals.append(aiida_orm.Data, with_group=AtomicOrbitalCollection)
 
-        orbitals = qb_orbitals.all()
+    orbitals = qb_orbitals.all()
 
-        # Prepare data for table
-        table_data = []
-        for (orbital_node,) in orbitals:
-            # Get orbital attributes
-            attrs = orbital_node.base.attributes.all
-            element = attrs.get("element", "Unknown")
-            orbital_type = attrs.get("orbital_type", "Unknown")
-            rcut = attrs.get("rcut_au", "N/A")
-            energy = attrs.get("cut_off_energy_ry", "N/A")
-            config = attrs.get("electron_config", "N/A")
+    # Prepare data for table
+    table_data = []
+    for (orbital_node,) in orbitals:
+        # Get orbital attributes
+        element = orbital_node.base.attributes.get("element", "Unknown")
+        orbital_filename = orbital_node.base.attributes.get("filename_second", "Unknown")
+        upf_filename = orbital_node.base.attributes.get("filename", "Unknown")
 
-            table_data.append([str(orbital_node.pk), element, orbital_type, f"{rcut}", f"{energy}", config])
+        table_data.append([str(orbital_node.pk), element, orbital_filename, upf_filename])
 
-        # Sort by element, then rcut
-        table_data.sort(key=lambda x: (x[1], float(x[3]) if x[3] != "N/A" else 0))
+    # Sort by element for better readability
+    table_data.sort(key=lambda x: x[1])
 
-        # Display the table using tabulate
-        echo.echo_info("Orbital details:")
-        headers = ["PK", "Element", "Type", "Rcut (au)", "Ecut (Ry)", "Config"]
-        echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
-    else:
-        echo.echo_info(
-            f"Collection has {collection.count()} orbitals (too many to display). "
-            "Use list_variants() method to query specific elements."
-        )
+    # Display the table using tabulate
+    echo.echo_info("Orbital and pseudopotential details:")
+    headers = ["PK", "Element", "Orbital File", "Pseudopotential File"]
+    echo.echo(tabulate.tabulate(table_data, headers=headers, tablefmt="simple"))
 
 
 @pseudos.command("create-family")
