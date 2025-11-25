@@ -4,7 +4,7 @@ import re
 import tempfile
 import typing as t
 import zipfile
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 from itertools import chain
 from pathlib import Path
@@ -52,6 +52,7 @@ class AtomicOrbitalCollection(orm.Group):
             raise NotExistent(f"Orbitals directory not found: {orb_path}")
 
         new_nodes = []
+        nodes_to_add = []
         orbital_files = list(orb_path.glob("*.orb")) + list(orb_path.glob("*/*.orb"))
         print(f"Number of orbital files found: {len(orbital_files)}")
 
@@ -73,16 +74,19 @@ class AtomicOrbitalCollection(orm.Group):
                     continue
 
                 orb_node = AtomicOrbitalData.get_or_create(path, orb)
-                orb_element = orb_info.pop("element")
+                # This is the element obtained from the UPF file
+                upf_element = orb_node.base.attributes.get("element")
                 orb_info["orbital_type"] = orb_type
                 assert (
-                    element.lower() == orb_element.lower()
-                ), f"Orbital element '{orb_element}' does not match pseudopotential element '{element}'"
-                orb_node.base.attributes.set_many(orb_info)
-                new_nodes.append(orb_node)
-                break  # Found matching orbital, move to next pseudopotential
+                    element.lower() == upf_element.lower()
+                ), f"Orbital element '{upf_element}' does not match pseudopotential element '{element}'"
+                # Check if new nodes
+                if not orb_node.is_stored:
+                    orb_node.base.attributes.set_many(orb_info)
+                    new_nodes.append(orb_node)
+                nodes_to_add.append(orb_node)
 
-        print(f"About to import {len(new_nodes)} nodes")
+        print(f"About to import {len(nodes_to_add)} nodes, {len(new_nodes)} nodes are new")
         group_label = group_label if group_label is not None else set_name
 
         if dryrun:
@@ -92,9 +96,9 @@ class AtomicOrbitalCollection(orm.Group):
         group = cls.collection.get_or_create(label=group_label)[0]
         print(f"Number of existing nodes in group {group_label}: {group.count()}")
 
-        for node in tqdm(new_nodes, desc="Storing nodes"):
+        for node in tqdm(new_nodes, desc="Storing newly created nodes"):
             node.store()
-        group.add_nodes(new_nodes)
+        group.add_nodes(nodes_to_add)
 
         return group
 
@@ -142,6 +146,108 @@ class AtomicOrbitalCollection(orm.Group):
                 f"Available elements: {sorted(available_elements)}"
             )
         return node
+
+    def get_statistics(self) -> dict:
+        """
+        Get statistics about the orbitals in this collection.
+
+        Returns:
+            dict: Dictionary containing:
+                - element_count: Number of unique elements
+                - total_orbitals: Total number of orbitals
+                - elements: List of element symbols
+                - orbital_types: Counter of orbital types
+                - rcut_range: Dict with min and max rcut values
+                - variants_per_element: Dict mapping elements to number of variants
+        """
+        elements = set()
+        orbital_types = Counter()
+        rcuts = []
+        element_variants = defaultdict(list)
+
+        for node in self.nodes:
+            attrs = node.base.attributes.all
+            element = attrs.get("element")
+            orbital_type = attrs.get("orbital_type")
+            rcut = attrs.get("rcut_au")
+
+            if element:
+                elements.add(element)
+                element_variants[element].append(node.pk)
+            if orbital_type:
+                orbital_types[orbital_type] += 1
+            if rcut is not None:
+                rcuts.append(rcut)
+
+        variants_per_element = {elem: len(variants) for elem, variants in element_variants.items()}
+
+        return {
+            "element_count": len(elements),
+            "total_orbitals": self.count(),
+            "elements": sorted(elements),
+            "orbital_types": dict(orbital_types),
+            "rcut_range": {"min": min(rcuts) if rcuts else None, "max": max(rcuts) if rcuts else None},
+            "variants_per_element": variants_per_element,
+        }
+
+    def list_elements(self) -> list[str]:
+        """
+        Get a list of all unique elements in this collection.
+
+        Returns:
+            list[str]: Sorted list of element symbols
+        """
+        elements = set()
+        for node in self.nodes:
+            element = node.base.attributes.get("element")
+            if element:
+                elements.add(element)
+        return sorted(elements)
+
+    def list_variants(self, element: str) -> list[dict]:
+        """
+        Get all orbital variants for a given element.
+
+        Args:
+            element: Element symbol
+
+        Returns:
+            list[dict]: List of dictionaries containing orbital information:
+                - pk: Node PK
+                - orbital_type: Type of orbital
+                - rcut_au: Cutoff radius in atomic units
+                - cut_off_energy_ry: Energy cutoff in Rydberg
+                - electron_config: Electronic configuration
+                - functional: Functional type
+        """
+        variants = []
+
+        q = orm.QueryBuilder()
+        q.append(
+            type(self),
+            filters={"id": self.pk},
+            tag="group",
+        )
+        q.append(
+            AtomicOrbitalData,
+            with_group="group",
+            filters={"attributes.element": element},
+        )
+
+        for (node,) in q.all():
+            attrs = node.base.attributes.all
+            variants.append(
+                {
+                    "pk": node.pk,
+                    "orbital_type": attrs.get("orbital_type"),
+                    "rcut_au": attrs.get("rcut_au"),
+                    "cut_off_energy_ry": attrs.get("cut_off_energy_ry"),
+                    "electron_config": attrs.get("electron_config"),
+                    "functional": attrs.get("functional"),
+                }
+            )
+
+        return variants
 
     def create_family(self, family_label, orbital_type, rcuts_dict: t.Union[dict, str]):
         """
