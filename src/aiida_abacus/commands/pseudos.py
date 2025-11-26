@@ -6,7 +6,6 @@ and numerical atomic orbitals from various sources.
 """
 
 import hashlib
-import json
 import shutil
 import tempfile
 import uuid
@@ -757,30 +756,20 @@ def show_collection(collection_label: str) -> None:
 @click.argument("collection_label")
 @click.argument("family_label")
 @click.option(
-    "--orbital-type",
-    default=None,
-    help="Orbital type (e.g., 'gga', 'pbe'). If not provided, will be auto-detected.",
-)
-@click.option(
-    "--rcuts",
-    default=None,
-    help="Path to JSON file with rcut specifications or inline JSON string. If not provided, enters interactive mode.",
-)
-@click.option(
     "--description",
     default="",
     help="Description for the created family",
 )
 @with_dbenv()
-def create_family(collection_label: str, family_label: str, orbital_type: str, rcuts: str, description: str) -> None:
+def create_family(collection_label: str, family_label: str, description: str) -> None:
     """
-    Create an AtomicOrbitalFamily from a collection.
+    Create an AtomicOrbitalFamily from a collection interactively.
 
     COLLECTION_LABEL is the label of the source collection.
     FAMILY_LABEL is the label for the new family.
 
     Example:
-        aiida-abacus pseudos create-family apns-efficiency-v1 my-family --orbital-type dzp --rcuts rcuts.json
+        aiida-abacus pseudos create-family apns-efficiency-v1 my-family
     """
     # Check if collection exists
     try:
@@ -811,107 +800,63 @@ def create_family(collection_label: str, family_label: str, orbital_type: str, r
         f"\nCollection: {collection_label} ({stats['total_orbitals']} orbitals, {stats['element_count']} elements)"
     )
 
-    # Detect orbital type if not provided
-    if orbital_type is None:
-        orbital_types = stats.get("orbital_types", {})
-        if len(orbital_types) == 1:
-            orbital_type = next(iter(orbital_types.keys()))
-            echo.echo(f"Auto-detected orbital type: {orbital_type}")
-        elif len(orbital_types) > 1:
-            echo.echo_error(f"Multiple orbital types found in collection: {list(orbital_types.keys())}")
-            echo.echo_error("Please specify --orbital-type explicitly")
-            raise click.Abort()
-        else:
-            echo.echo_error("No orbital types found in collection")
-            raise click.Abort()
-
-    # Determine mode: interactive or non-interactive
-    if rcuts is None:
-        # Interactive mode: let user select orbital files directly
-        echo.echo_info("Entering interactive mode - select orbital files for each element")
-
-        try:
-            selected_nodes = select_orbital_files_interactive(collection)
-        except KeyboardInterrupt:
-            echo.echo("\nOperation cancelled by user.")
-            raise click.Abort()
-
-        # Show summary
-        echo.echo("\n" + "=" * 60)
-        echo.echo("Summary:")
-        echo.echo(f"  Collection: {collection_label}")
-        echo.echo(f"  Family: {family_label}")
-        echo.echo(f"  Orbital type: {orbital_type}")
-        echo.echo(f"  Elements selected: {len(selected_nodes)}")
-        echo.echo("")
-
-        if not click.confirm("Create family with selected orbitals?", default=True):
-            echo.echo("Operation cancelled.")
-            raise click.Abort()
-
-        # Create family from selected nodes
-        echo.echo_info(f"Creating family '{family_label}'...")
-        try:
-            family = AtomicOrbitalFamily(label=family_label)
-            family.store()
-
-            # Load and add selected nodes
-            nodes_to_add = [load_node(pk) for pk in selected_nodes.values()]
-            family.add_nodes(nodes_to_add)
-
-            if description:
-                family.description = description
-
-            echo.echo_success(f"Successfully created family '{family_label}' with {family.count()} orbitals")
-
-            # Show which elements were included
-            elements = sorted([node.element for node in family.nodes])
-            echo.echo_info(f"Elements included: {', '.join(elements)}")
-
-        except Exception as e:
-            echo.echo_error(f"Failed to create family: {e}")
-            raise click.Abort()
-
+    # Auto-detect orbital type
+    orbital_types = stats.get("orbital_types", {})
+    if len(orbital_types) == 1:
+        orbital_type = next(iter(orbital_types.keys()))
+        echo.echo(f"Auto-detected orbital type: {orbital_type}")
+    elif len(orbital_types) > 1:
+        echo.echo_error(f"Multiple orbital types found in collection: {list(orbital_types.keys())}")
+        echo.echo_error("Collection must have a single orbital type")
+        raise click.Abort()
     else:
-        # Non-interactive mode: use rcuts specification
-        rcuts_dict = {}
-        try:
-            # Try to load as file first
-            rcuts_path = Path(rcuts)
-            if rcuts_path.exists():
-                rcuts_dict = json.loads(rcuts_path.read_text())
-                echo.echo_info(f"Loaded rcut specifications from {rcuts}")
-            else:
-                # Try to parse as inline JSON
-                rcuts_dict = json.loads(rcuts)
-                echo.echo_info("Parsed inline rcut specifications")
-        except Exception as e:
-            echo.echo_error(f"Failed to parse rcut specifications: {e}")
-            echo.echo_info("Rcuts should be a JSON file path or inline JSON string like:")
-            echo.echo('  {"Si": 7, "O": 6, "Other": 7}')
-            raise click.Abort()
+        echo.echo_error("No orbital types found in collection")
+        raise click.Abort()
 
-        # Create family from collection using rcuts
-        echo.echo_info(f"Creating family '{family_label}' from collection '{collection_label}'...")
-        echo.echo(f"  Orbital type: {orbital_type}")
-        echo.echo(f"  Rcut specification: {len(rcuts_dict)} entries")
+    # Interactive mode: let user select orbital files directly
+    echo.echo_info("Entering interactive mode - select orbital files for each element")
 
-        try:
-            with cli_spinner():
-                family = collection.create_family(family_label, orbital_type, rcuts_dict)
+    try:
+        selected_nodes = select_orbital_files_interactive(collection)
+    except KeyboardInterrupt:
+        echo.echo("\nOperation cancelled by user.")
+        raise click.Abort()
 
-            if description:
-                family.description = description
+    # Show summary
+    echo.echo("\n" + "=" * 60)
+    echo.echo("Summary:")
+    echo.echo(f"  Collection: {collection_label}")
+    echo.echo(f"  Family: {family_label}")
+    echo.echo(f"  Orbital type: {orbital_type}")
+    echo.echo(f"  Elements selected: {len(selected_nodes)}")
+    echo.echo("")
 
-            echo.echo_success(f"Successfully created family '{family_label}' with {family.count()} orbitals")
+    if not click.confirm("Create family with selected orbitals?", default=True):
+        echo.echo("Operation cancelled.")
+        raise click.Abort()
 
-            # Show which elements were included
-            elements = sorted([node.element for node in family.nodes])
-            echo.echo_info(f"Elements included: {', '.join(elements)}")
+    # Create family from selected nodes
+    echo.echo_info(f"Creating family '{family_label}'...")
+    try:
+        family = AtomicOrbitalFamily(label=family_label)
+        family.store()
 
-        except Exception as e:
-            echo.echo_error(f"Failed to create family: {e}")
-            raise click.Abort()
+        # Load and add selected nodes
+        nodes_to_add = [load_node(pk) for pk in selected_nodes.values()]
+        family.add_nodes(nodes_to_add)
+
+        if description:
+            family.description = description
+
+        echo.echo_success(f"Successfully created family '{family_label}' with {family.count()} orbitals")
+
+        # Show which elements were included
+        elements = sorted([node.element for node in family.nodes])
+        echo.echo_info(f"Elements included: {', '.join(elements)}")
+
+    except Exception as e:
+        echo.echo_error(f"Failed to create family: {e}")
+        raise click.Abort()
 
 
 @pseudos.command("install-collection")
