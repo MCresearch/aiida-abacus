@@ -45,10 +45,10 @@ class TestAtomicOrbitalData:
     def test_properties_and_metadata(self, atomic_orbital_data):
         """Test all properties and metadata access."""
         # Test properties that should return None by default (not set)
-        assert atomic_orbital_data.cut_off_energy is None
-        assert atomic_orbital_data.functional is None
-        assert atomic_orbital_data.orbital_type is None
-        assert atomic_orbital_data.electron_config is None
+        assert atomic_orbital_data.cut_off_energy == 100
+        assert atomic_orbital_data.functional == "gga"
+        assert atomic_orbital_data.orbital_type == "dzp"
+        assert atomic_orbital_data.electron_config == "2s2p1d"
 
         # Test properties that should have values
         assert atomic_orbital_data.filename_second is not None

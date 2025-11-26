@@ -1,6 +1,7 @@
 import json
 import pathlib
 import re
+import shutil
 import tempfile
 import typing as t
 import zipfile
@@ -101,6 +102,164 @@ class AtomicOrbitalCollection(orm.Group):
         group.add_nodes(nodes_to_add)
 
         return group
+
+    @classmethod
+    def import_from_local_paths(
+        cls, paths: list[FilePath], group_label: str, description: str = "", dryrun: bool = False
+    ) -> t.Optional["AtomicOrbitalCollection"]:
+        """
+        Import orbitals from one or more local directories or ZIP files.
+
+        This method recursively scans all provided paths for .orb and .upf/.UPF files,
+        creates AtomicOrbitalData nodes for ALL variants (no selection), and stores them
+        in a single AtomicOrbitalCollection.
+
+        Parameters:
+        -----------
+        paths : list[FilePath]
+            List of local directory or ZIP file paths to import from
+        group_label : str
+            Label for the created collection
+        description : str, default ""
+            Description for the collection
+        dryrun : bool, default False
+            If True, only show what would be imported without actually importing
+
+        Returns:
+        --------
+        AtomicOrbitalCollection or None
+            The created/existing collection, or None if dryrun=True
+        """
+        # Collect all files from all paths
+        all_orbital_files = []
+        all_pseudo_files = []
+
+        # Use a persistent temporary directory for ZIP extractions
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            for input_path in paths:
+                path = Path(input_path)
+
+                # Handle ZIP extraction
+                with temporary_unzip_folder(path) as unzipped_path:
+                    # Recursively scan for files
+                    orb_files = []
+                    pseudo_files = []
+
+                    for orb in unzipped_path.rglob("*.orb"):
+                        orb_files.append(orb)
+
+                    for upf in chain(unzipped_path.rglob("*.upf"), unzipped_path.rglob("*.UPF")):
+                        pseudo_files.append(upf)
+
+                    # If ZIP, copy files to persistent temp location
+                    if path.suffix.lower() == ".zip":
+                        persistent_dir = temp_path / f"extracted_{path.stem}"
+                        persistent_dir.mkdir(exist_ok=True)
+
+                        for orb in orb_files:
+                            dest = persistent_dir / orb.name
+                            shutil.copy2(orb, dest)
+                            all_orbital_files.append(dest)
+
+                        for upf in pseudo_files:
+                            dest = persistent_dir / upf.name
+                            shutil.copy2(upf, dest)
+                            all_pseudo_files.append(dest)
+                    else:
+                        all_orbital_files.extend(orb_files)
+                        all_pseudo_files.extend(pseudo_files)
+
+            print(f"Total files found: {len(all_orbital_files)} orbitals, {len(all_pseudo_files)} pseudopotentials")
+
+            # Parse and match files by element
+            element_orbitals = defaultdict(list)
+            element_pseudos = {}
+
+            # Parse orbital files
+            for orb_path in tqdm(all_orbital_files, desc="Parsing orbital files"):
+                try:
+                    metadata = parse_orb_metadata(orb_path)
+                    element = metadata.get("Element", "").strip()
+                    if element:
+                        element_orbitals[element].append(orb_path)
+                    else:
+                        print(f"Warning: No element found in {orb_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to parse {orb_path}: {e}")
+
+            # Parse pseudopotential files
+            for upf_path in tqdm(all_pseudo_files, desc="Parsing pseudopotential files"):
+                try:
+                    element = parse_element(upf_path.read_text())
+                    if element in element_pseudos:
+                        print(f"Warning: Multiple pseudopotentials found for {element}")
+                    element_pseudos[element] = upf_path
+                except Exception as e:
+                    print(f"Warning: Failed to parse {upf_path}: {e}")
+
+            # Match elements and create nodes
+            new_nodes = []
+            nodes_to_add = []
+
+            for element in sorted(element_orbitals.keys()):
+                if element not in element_pseudos:
+                    print(f"Warning: No pseudopotential found for element {element}, skipping")
+                    continue
+
+                upf_path = element_pseudos[element]
+                orb_paths = element_orbitals[element]
+
+                print(f"{element}: {len(orb_paths)} orbital variant(s)")
+
+                # Create node for EACH variant
+                for orb_path in orb_paths:
+                    try:
+                        # Parse orbital filename info
+                        orb_info = parse_orb_filename(orb_path)
+                        orb_type = orb_info.get("functional", "unknown").lower()
+                        orb_info["orbital_type"] = orb_type
+
+                        # Create or get existing node
+                        orb_node = AtomicOrbitalData.get_or_create(upf_path, orb_path)
+
+                        # Set attributes for new nodes
+                        if not orb_node.is_stored:
+                            orb_node.base.attributes.set_many(orb_info)
+                            new_nodes.append(orb_node)
+
+                        nodes_to_add.append(orb_node)
+
+                    except Exception as e:
+                        print(f"Warning: Failed to create node for {element} / {orb_path.name}: {e}")
+
+            print(f"Prepared {len(nodes_to_add)} nodes ({len(new_nodes)} new)")
+
+            if dryrun:
+                print("DRY RUN - Not storing nodes or creating collection")
+                return None
+
+            # Check if collection already exists
+            try:
+                existing = cls.collection.get(label=group_label)
+                print(f"Collection '{group_label}' already exists with {existing.count()} nodes")
+                return existing
+            except NotExistent:
+                pass
+
+            # Store new nodes and create collection
+            group = cls.collection.get_or_create(label=group_label)[0]
+
+            for node in tqdm(new_nodes, desc="Storing new nodes"):
+                node.store()
+
+            group.add_nodes(nodes_to_add)
+
+            if description:
+                group.description = description
+
+            return group
 
     def get_orbital(
         self, element: str, orbital_type: str, rcut: float, cut_off_energy=None, electron_config=None, functional=None

@@ -8,7 +8,7 @@ and numerical atomic orbitals from various sources.
 import hashlib
 import shutil
 import tempfile
-import uuid
+import traceback
 import zipfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -22,7 +22,11 @@ from aiida.cmdline.utils.decorators import with_dbenv
 from aiida.orm import QueryBuilder, load_group, load_node
 from click_spinner import spinner as cli_spinner
 
-from ..group.orb_group import AtomicOrbitalCollection, AtomicOrbitalFamily, OrbitalFamilyImporter, parse_orb_metadata
+from ..group.orb_group import (
+    AtomicOrbitalCollection,
+    AtomicOrbitalFamily,
+    temporary_unzip_folder,
+)
 
 # Import the main command group to attach subcommands to it
 from . import cmd_aiida_abacus
@@ -213,79 +217,12 @@ def verify_md5(filepath: Path, expected_md5: str) -> bool:
     return hash_md5.hexdigest() == expected_md5.lower()
 
 
-@pseudos.command()
-@click.argument("name", type=click.Choice(list(KNOWN_SETS.keys())))
-@click.option(
-    "--force-download",
-    is_flag=True,
-    default=False,
-    help="Force re-download even if cached file exists",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    default=False,
-    help="Show what would be done without actually importing",
-)
-@click.option(
-    "--verbose",
-    is_flag=True,
-    default=False,
-    help="Show detailed progress information during import",
-)
-@click.option(
-    "--collection-only",
-    is_flag=True,
-    default=False,
-    help=(
-        "Import as collections only (recommended). Use 'create-family' afterwards to create calculation-ready families."
-    ),
-)
-@with_dbenv()
-def install(name: str, force_download: bool, dry_run: bool, verbose: bool, collection_only: bool) -> None:
+def _download_and_verify(url: str, expected_md5: str, name: str, force_download: bool) -> Path:
     """
-    Install a known pseudopotential and orbital set.
+    Download and verify a file from URL.
 
-    NAME is the name of the pseudopotential set to install.
-
-    Available sets:
-    - apns-efficiency/precision-v1: APNS efficiency and precision pseudopotential and orbital set
-
-    This command will:
-    1. Download the archive from the specified URL (with caching)
-    2. Verify the MD5 checksum
-    3. Extract the archive
-    4. Create orbital families from the extracted content (or collections with --collection-only)
-    5. Import pseudopotentials and orbitals into AiiDA
-
-    With --collection-only flag (recommended):
-    - Creates collections that store ALL orbital variants
-    - Use 'create-family' command afterwards to create calculation-ready families
-    - More flexible workflow for selecting specific orbitals
-
-    Without --collection-only flag (legacy):
-    - Directly creates families (may require interactive variant selection)
-    - For the APNS set, creates two orbital families:
-      - apns-efficiency-v1: efficiency orbitals with corresponding pseudopotentials
-      - apns-precision-v1: precision orbitals with corresponding pseudopotentials
+    Returns the path to the cached file.
     """
-    # If collection-only flag is set, delegate to install_collection
-    if collection_only:
-        echo.echo_info("Using collection-only mode (recommended workflow)")
-        return install_collection(name, force_download, dry_run)
-
-    # Legacy behavior: direct family creation with variant selection
-    echo.echo_warning(
-        "Using legacy family creation mode. Consider using --collection-only flag for more flexible workflow."
-    )
-
-    if name not in KNOWN_SETS:
-        raise click.Abort(f"Unknown pseudopotential set: {name}")
-
-    set_info = KNOWN_SETS[name]
-    url = set_info["url"]
-    expected_md5 = set_info["md5"]
-
     # Parse URL to get filename
     parsed_url = urlparse(url)
     filename = Path(parsed_url.path).name
@@ -315,19 +252,15 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool, colle
         if not force_download and cache_file.exists():
             echo.echo_warning("MD5 checksum verification failed. The file may be corrupted.")
             if click.confirm("Do you want to re-download the file?"):
-                return install(name, force_download=True, dry_run=dry_run, verbose=verbose)
+                return _download_and_verify(url, expected_md5, name, force_download=True)
         raise click.Abort(f"MD5 checksum verification failed for {cache_file}")
 
     echo.echo_success("MD5 checksum verified")
+    return cache_file
 
-    if dry_run:
-        echo.echo_info("DRY RUN - Would extract and import the following:")
-        echo.echo(f"  Archive: {cache_file}")
-        echo.echo("  Expected families:")
-        echo.echo("    - apns-efficiency-v1 (efficiency)")
-        echo.echo("    - apns-precision-v1 (precision)")
-        return
 
+def _import_apns_set(cache_file: Path) -> None:
+    """Import APNS pseudopotential set with special multi-collection structure."""
     # Extract and process the archive
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -345,6 +278,7 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool, colle
         # Look for the expected structure:
         # - apns-orbitals-efficiency-v1/
         # - apns-pseudopotentials-v1/
+        # - apns-orbitals-precision-v1/
         orbital_efficiency_dir = None
         pseudopotential_dir = None
         orbital_precision_dir = None
@@ -367,139 +301,246 @@ def install(name: str, force_download: bool, dry_run: bool, verbose: bool, colle
 
         echo.echo_success(f"Found orbital directory: {orbital_efficiency_dir.name}")
         echo.echo_success(f"Found pseudopotential directory: {pseudopotential_dir.name}")
+        if orbital_precision_dir:
+            echo.echo_success(f"Found precision orbital directory: {orbital_precision_dir.name}")
 
-        # Define the families to create
-        families_to_create = []
+        # Create a temporary structured repository
+        # Structure: temp_repo/apns-efficiency-v1/{Pseudopotential/, Orbitals/}
+        #            temp_repo/apns-precision-v1/{Pseudopotential/, Orbitals/}
+        repo_path = temp_path / "repository"
+        repo_path.mkdir()
 
-        # Always add efficiency family
-        families_to_create.append(
+        collections_to_create = []
+
+        # Efficiency collection
+        efficiency_repo = repo_path / "apns-efficiency-v1"
+        efficiency_repo.mkdir()
+        (efficiency_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
+        (efficiency_repo / "Orbitals").symlink_to(orbital_efficiency_dir, target_is_directory=True)
+        collections_to_create.append(
             {
                 "name": "apns-efficiency-v1",
-                "orbital_dir": orbital_efficiency_dir,
-                "description": "APNS efficiency orbital family (v1)",
+                "set_name": "apns-efficiency-v1",
+                "description": "APNS efficiency orbital collection (v1) - all variants",
             }
         )
 
-        # Add precision family if precision orbitals are found
+        # Precision collection (if available)
         if orbital_precision_dir:
-            families_to_create.append(
+            precision_repo = repo_path / "apns-precision-v1"
+            precision_repo.mkdir()
+            (precision_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
+            (precision_repo / "Orbitals").symlink_to(orbital_precision_dir, target_is_directory=True)
+            collections_to_create.append(
                 {
                     "name": "apns-precision-v1",
-                    "orbital_dir": orbital_precision_dir,
-                    "description": "APNS precision orbital family (v1)",
+                    "set_name": "apns-precision-v1",
+                    "description": "APNS precision orbital collection (v1) - all variants",
                 }
             )
 
-        echo.echo_info(f"Will create {len(families_to_create)} orbital families:")
-        for family in families_to_create:
-            echo.echo(f"  - {family['name']}: {family['description']}")
+        echo.echo_info(f"Will create {len(collections_to_create)} orbital collections")
 
-        # Import each family
-        for family in families_to_create:
-            family_name = family["name"]
-            orbital_dir = family["orbital_dir"]
-            description = family["description"]
+        # Import each collection
+        created_collections = []
+        for collection_info in collections_to_create:
+            collection_name = collection_info["name"]
+            set_name = collection_info["set_name"]
+            description = collection_info["description"]
 
-            # Check if family already exists
+            # Check if collection already exists
             try:
-                existing_group = load_group(label=family_name)
-                echo.echo_warning(f"Family '{family_name}' already exists with {existing_group.count()} members")
-                if click.confirm(f"Do you want to skip importing '{family_name}'?", default=True):
+                existing_collection = load_group(label=collection_name)
+                echo.echo_warning(
+                    f"Collection '{collection_name}' already exists with {existing_collection.count()} orbitals"
+                )
+                if click.confirm(f"Do you want to skip importing '{collection_name}'?", default=True):
                     continue
                 else:
-                    echo.echo_info(f"Re-importing '{family_name}' (this may create duplicates)")
+                    echo.echo_info(f"Re-importing '{collection_name}'")
             except Exception:
-                echo.echo_info(f"Creating new family '{family_name}'")
+                echo.echo_info(f"Creating new collection '{collection_name}'")
 
-            with cli_spinner():
-                try:
-                    # Check for multiple orbital variants and handle selection
-                    orbital_files = list(orbital_dir.rglob("*.orb"))
-
-                    # Parse elements from orbital files
-
-                    element_orbitals = {}
-                    for orbital_path in orbital_files:
-                        try:
-                            metadata = parse_orb_metadata(orbital_path)
-                            element = metadata.get("Element", "").strip()
-                            if element:
-                                if element not in element_orbitals:
-                                    element_orbitals[element] = []
-                                element_orbitals[element].append(orbital_path)
-                        except Exception:
-                            # Fallback to filename parsing
-                            element = orbital_path.stem.split("_")[0]
-                            if element and len(element) > 0:
-                                if element not in element_orbitals:
-                                    element_orbitals[element] = []
-                                element_orbitals[element].append(orbital_path)
-
-                    # Check if we have multiple variants
-                    has_variants = any(len(variants) > 1 for variants in element_orbitals.values())
-                    variant_choices = {}
-                    final_family_name = family_name
-                    needs_uuid_prefix = False
-
-                    if has_variants and not dry_run:
-                        echo.echo(f"Multiple orbital variants found - launching interactive selectionfor {family_name}")
-                        selected_orbitals, manual_selection = select_orbital_variants(element_orbitals)
-
-                        # Store variant choices for group extras
-                        for element, orbital_path in selected_orbitals.items():
-                            variant_choices[element] = orbital_path.name
-
-                        # Add UUID prefix to family name since we have variants
-                        needs_uuid_prefix = True
-
-                    # Update family name with UUID prefix if needed
-                    if needs_uuid_prefix:
-                        uuid_prefix = str(uuid.uuid4())[:8]
-                        final_family_name = f"{family_name}-{uuid_prefix}"
-                        echo.echo(f"Created variant-specific family: {final_family_name}")
-
-                    # Import the orbital family
-                    group = OrbitalFamilyImporter.import_folder(
-                        orbital_path=str(orbital_dir),
-                        pseudo_path=str(pseudopotential_dir),
-                        label=final_family_name,
+            try:
+                echo.echo(f"Importing {collection_name}...")
+                with cli_spinner():
+                    collection = AtomicOrbitalCollection.import_orbital_set(
+                        repository=repo_path,
+                        set_name=set_name,
                         dryrun=False,
-                        stop_if_inconsistent=False,  # Continue on inconsistencies for real-world datasets
-                        verbose=verbose,  # Show detailed progress based on user preference
-                        variant_choices=selected_orbitals if needs_uuid_prefix else None,
+                        group_label=collection_name,
                     )
-                    group.description = description
 
-                    if group is not None:
-                        # Store variant choices in group extras
-                        if variant_choices:
-                            group.base.extras.set("variant_choices", manual_selection)
+                if collection is not None:
+                    collection.description = description
+                    created_collections.append((collection_name, collection.count()))
+                    echo.echo_success(
+                        f"Successfully imported collection '{collection_name}' with {collection.count()} orbitals"
+                    )
+                else:
+                    echo.echo_info(f"Collection '{collection_name}' already up to date")
 
-                        echo.echo_success(
-                            f"Successfully imported family '{final_family_name}' with {group.count()} orbitals"
-                        )
-                        if needs_uuid_prefix:
-                            echo.echo_info(f"UUID prefix {uuid_prefix} added to distinguish variant selection")
-                    else:
-                        echo.echo_info(f"Family '{final_family_name}' already up to date (no new nodes)")
+            except Exception as e:
+                echo.echo_error(f"Failed to import collection '{collection_name}': {e}")
+                if not click.confirm("Continue with other collections?", default=True):
+                    break
 
-                except Exception as e:
-                    echo.echo_error(f"Failed to import family '{family_name}': {e}")
-                    if not click.confirm("Continue with other families?", default=True):
-                        break
+        if created_collections:
+            echo.echo("")
+            echo.echo_success("Import process completed!")
+            echo.echo_info("Created collections:")
+            for coll_name, count in created_collections:
+                echo.echo(f"  - {coll_name}: {count} orbitals")
+            echo.echo("")
+            echo.echo_info("Next steps:")
+            echo.echo("  1. List collections: aiida-abacus pseudos list-collections")
+            echo.echo("  2. Show collection details: aiida-abacus pseudos show-collection <label>")
+            echo.echo(
+                "  3. Create family: aiida-abacus pseudos create-family <collection> <family> "
+                "--orbital-type dzp --rcuts <json>"
+            )
+        else:
+            echo.echo_info("No new collections were created")
 
-        echo.echo_success("Import process completed!")
+
+def _install_from_known_set(name: str, force_download: bool, dry_run: bool) -> None:
+    """Install a known pseudopotential and orbital set."""
+    if name not in KNOWN_SETS:
+        raise click.Abort(f"Unknown pseudopotential set: {name}")
+
+    set_info = KNOWN_SETS[name]
+    url = set_info["url"]
+    expected_md5 = set_info["md5"]
+
+    # Download and verify using helper
+    cache_file = _download_and_verify(url, expected_md5, name, force_download)
+
+    if dry_run:
+        echo.echo_info("DRY RUN - Would extract and import the following collections:")
+        echo.echo(f"  Archive: {cache_file}")
+        # Show what would be imported based on the set type
+        if "apns" in name.lower():
+            echo.echo("  Expected collections:")
+            echo.echo("    - apns-efficiency-v1")
+            echo.echo("    - apns-precision-v1")
+        else:
+            echo.echo(f"  Would create collection: {name}")
+        return
+
+    # APNS has special multi-collection structure
+    if "apns" in name.lower():
+        _import_apns_set(cache_file)
+    else:
+        # Generic sets - import as single collection using local path import
+        _install_from_local_paths(
+            paths=(str(cache_file),), label=name, description=set_info.get("description", ""), dry_run=False
+        )
+
+
+def _install_from_local_paths(paths: tuple[str, ...], label: str, description: str, dry_run: bool) -> None:
+    """Install collection from local directories or ZIP files."""
+    # Validate inputs
+    if not label:
+        echo.echo_error("--label is required when installing from local paths")
+        raise click.Abort()
+
+    # Validate all paths exist
+    for path_str in paths:
+        path = Path(path_str)
+        if not path.exists():
+            echo.echo_error(f"Path does not exist: {path}")
+            raise click.Abort()
+
+    echo.echo(f"Installing collection from {len(paths)} local path(s)")
+    for path in paths:
+        echo.echo(f"  - {path}")
+    echo.echo("")
+
+    if dry_run:
+        echo.echo_info("DRY RUN - Would scan paths and create collection:")
+        echo.echo(f"  Label: {label}")
+        echo.echo(f"  Description: {description or '(none)'}")
+
+        # Quick scan to show what would be found
+        total_orbs = 0
+        total_upfs = 0
+        for path_str in paths:
+            path = Path(path_str)
+            with temporary_unzip_folder(path) as unzipped:
+                orb_files = list(unzipped.rglob("*.orb"))
+                upf_files = list(unzipped.rglob("*.upf")) + list(unzipped.rglob("*.UPF"))
+                total_orbs += len(orb_files)
+                total_upfs += len(upf_files)
+
+        echo.echo(f"  Total files: {total_orbs} orbitals, {total_upfs} pseudopotentials")
+        return
+
+    # Check if collection already exists
+    try:
+        existing_collection = load_group(label=label)
+        echo.echo_warning(f"Collection '{label}' already exists with {existing_collection.count()} orbitals")
+        if not click.confirm("Do you want to continue (may add duplicates)?", default=False):
+            raise click.Abort()
+    except Exception:
+        echo.echo_info(f"Creating new collection '{label}'")
+
+    # Import from paths
+    try:
+        echo.echo("Importing orbitals from local paths...")
+        with cli_spinner():
+            collection = AtomicOrbitalCollection.import_from_local_paths(
+                paths=list(paths), group_label=label, description=description, dryrun=False
+            )
+
+        if collection:
+            echo.echo_success(f"Successfully created collection '{label}' with {collection.count()} orbitals")
+
+            # Show statistics
+            stats = collection.get_statistics()
+            echo.echo("")
+            echo.echo_info("Collection statistics:")
+            echo.echo(f"  Elements: {stats['element_count']}")
+            echo.echo(f"  Total orbitals: {stats['total_orbitals']}")
+            echo.echo(f"  Orbital types: {', '.join(f'{k}({v})' for k, v in stats['orbital_types'].items())}")
+
+            # Show elements with multiple variants
+            variants_per_elem = stats["variants_per_element"]
+            multi_variant = {e: c for e, c in variants_per_elem.items() if c > 1}
+            if multi_variant:
+                echo.echo(f"  Elements with multiple variants: {len(multi_variant)}")
+                for elem, count in sorted(multi_variant.items())[:5]:  # Show first 5
+                    echo.echo(f"    {elem}: {count} variants")
+                if len(multi_variant) > 5:
+                    echo.echo(f"    ... and {len(multi_variant) - 5} more")
+
+            echo.echo("")
+            echo.echo_info("Next steps:")
+            echo.echo("  1. List collections: aiida-abacus pseudos list-collections")
+            echo.echo(f"  2. Show collection details: aiida-abacus pseudos show-collection {label}")
+            echo.echo(f"  3. Create family: aiida-abacus pseudos create-family {label} <family-label>")
+        else:
+            echo.echo_info("Collection already up to date")
+
+    except Exception as e:
+        echo.echo_error(f"Failed to import collection: {e}")
+        traceback.print_exc()
+        raise click.Abort()
 
 
 @pseudos.command()
 def list_sets() -> None:
-    """List all available pseudopotential sets."""
+    """List all available pseudopotential sets that can be installed by name."""
     echo.echo_info("Available pseudopotential sets:")
     for name, info in KNOWN_SETS.items():
         echo.echo(f"  {name}: {info['description']}")
         echo.echo(f"    URL: {info['url']}")
         echo.echo(f"    MD5: {info['md5']}")
         echo.echo("")
+
+    echo.echo_info("You can also install from local directories or ZIP files:")
+    echo.echo("  aiida-abacus pseudos install-collection /path/to/files --label my-collection")
+    echo.echo("  aiida-abacus pseudos install-collection path1.zip path2/ --label combined")
+    echo.echo("")
 
 
 @pseudos.command("list-families")
@@ -860,12 +901,26 @@ def create_family(collection_label: str, family_label: str, description: str) ->
 
 
 @pseudos.command("install-collection")
-@click.argument("name", type=click.Choice(list(KNOWN_SETS.keys())))
+@click.argument("sources", nargs=-1, required=True)
+@click.option(
+    "--label",
+    "-l",
+    type=str,
+    default=None,
+    help="Label for created collection (required for local paths)",
+)
+@click.option(
+    "--description",
+    "-d",
+    type=str,
+    default="",
+    help="Description for the collection",
+)
 @click.option(
     "--force-download",
     is_flag=True,
     default=False,
-    help="Force re-download even if cached file exists",
+    help="Force re-download even if cached file exists (known sets only)",
 )
 @click.option(
     "--dry-run",
@@ -874,211 +929,41 @@ def create_family(collection_label: str, family_label: str, description: str) ->
     help="Show what would be done without actually importing",
 )
 @with_dbenv()
-def install_collection(name: str, force_download: bool, dry_run: bool) -> None:
+def install_collection(
+    sources: tuple[str, ...], label: str, description: str, force_download: bool, dry_run: bool
+) -> None:
     """
-    Install a known pseudopotential and orbital set as collections.
+    Install pseudopotential and orbital collections from known sets or local paths.
 
-    NAME is the name of the pseudopotential set to install.
+    SOURCES can be:
+    - A known set name (e.g., 'apns-efficiency/precision-v1')
+    - One or more local directory or ZIP file paths
 
-    This command will:
-    1. Download the archive from the specified URL (with caching)
-    2. Verify the MD5 checksum
-    3. Extract the archive
-    4. Create orbital collections (one for each subset found)
+    Examples:
 
-    For the APNS set, this will create two orbital collections:
-    - apns-efficiency-v1: efficiency orbitals repository
-    - apns-precision-v1: precision orbitals repository
+        # Install from known set
+        aiida-abacus pseudos install-collection apns-efficiency/precision-v1
+
+        # Install from local directory
+        aiida-abacus pseudos install-collection /path/to/orbitals --label my-collection
+
+        # Install from multiple paths
+        aiida-abacus pseudos install-collection /path/to/set1 /path/to/set2.zip --label combined
+
+        # Install from ZIP file
+        aiida-abacus pseudos install-collection orbitals.zip --label from-zip
+
+    For known sets, this downloads and imports predefined collections.
+    For local paths, this recursively scans for .orb and .upf/.UPF files and creates
+    a single collection with ALL orbital variants (no selection).
 
     Collections store ALL orbital variants. Use 'aiida-abacus pseudos create-family'
     to create calculation-ready families from collections.
     """
-    if name not in KNOWN_SETS:
-        raise click.Abort(f"Unknown pseudopotential set: {name}")
-
-    set_info = KNOWN_SETS[name]
-    url = set_info["url"]
-    expected_md5 = set_info["md5"]
-
-    # Parse URL to get filename
-    parsed_url = urlparse(url)
-    filename = Path(parsed_url.path).name
-    cache_file = get_cache_dir() / filename
-
-    # Download file if not cached or force download is requested
-    if not cache_file.exists() or force_download:
-        echo.echo(f"Downloading {name} from {url}...")
-
-        with cli_spinner():
-            try:
-                # Download to temporary file first, then move to cache location
-                with tempfile.NamedTemporaryFile(delete=False, suffix=filename) as tmp_file:
-                    tmp_path = Path(tmp_file.name)
-                    urlretrieve(url, tmp_path)
-                    shutil.move(tmp_path, cache_file)
-            except Exception as e:
-                raise click.Abort(f"Failed to download file: {e}")
-
-        echo.echo_success(f"Downloaded to {cache_file}")
+    # Decision: known set or local paths?
+    if len(sources) == 1 and sources[0] in KNOWN_SETS:
+        # Existing behavior: known set download
+        _install_from_known_set(name=sources[0], force_download=force_download, dry_run=dry_run)
     else:
-        echo.echo(f"Using cached file: {cache_file}")
-
-    # Verify MD5 checksum
-    echo.echo("Verifying MD5 checksum...")
-    if not verify_md5(cache_file, expected_md5):
-        if not force_download and cache_file.exists():
-            echo.echo_warning("MD5 checksum verification failed. The file may be corrupted.")
-            if click.confirm("Do you want to re-download the file?"):
-                return install_collection(name, force_download=True, dry_run=dry_run)
-        raise click.Abort(f"MD5 checksum verification failed for {cache_file}")
-
-    echo.echo_success("MD5 checksum verified")
-
-    if dry_run:
-        echo.echo_info("DRY RUN - Would extract and import the following collections:")
-        echo.echo(f"  Archive: {cache_file}")
-        echo.echo("  Expected collections:")
-        echo.echo("    - apns-efficiency-v1")
-        echo.echo("    - apns-precision-v1")
-        return
-
-    # Extract and process the archive
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        echo.echo_info(f"Extracting archive to {temp_path}")
-
-        with cli_spinner():
-            with zipfile.ZipFile(cache_file, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
-
-        # Find the extracted directories
-        extracted_dirs = [d for d in temp_path.iterdir() if d.is_dir()]
-        echo.echo_info(f"Extracted directories: {[d.name for d in extracted_dirs]}")
-
-        # Look for the expected structure:
-        # - apns-orbitals-efficiency-v1/
-        # - apns-pseudopotentials-v1/
-        # - apns-orbitals-precision-v1/
-        orbital_efficiency_dir = None
-        pseudopotential_dir = None
-        orbital_precision_dir = None
-
-        for dir_path in extracted_dirs:
-            dir_name = dir_path.name
-            if "orbitals-efficiency" in dir_name:
-                orbital_efficiency_dir = dir_path
-            elif "pseudopotentials" in dir_name:
-                pseudopotential_dir = dir_path
-            elif "orbitals-precision" in dir_name:
-                orbital_precision_dir = dir_path
-
-        if not orbital_efficiency_dir or not pseudopotential_dir:
-            raise click.Abort(
-                "Expected directory structure not found. "
-                f"Looking for directories containing 'orbitals-efficiency' and 'pseudopotentials'. "
-                f"Found: {[d.name for d in extracted_dirs]}"
-            )
-
-        echo.echo_success(f"Found orbital directory: {orbital_efficiency_dir.name}")
-        echo.echo_success(f"Found pseudopotential directory: {pseudopotential_dir.name}")
-        if orbital_precision_dir:
-            echo.echo_success(f"Found precision orbital directory: {orbital_precision_dir.name}")
-
-        # Create a temporary structured repository
-        # Structure: temp_repo/apns-efficiency-v1/{Pseudopotential/, Orbitals/}
-        #            temp_repo/apns-precision-v1/{Pseudopotential/, Orbitals/}
-        repo_path = temp_path / "repository"
-        repo_path.mkdir()
-
-        collections_to_create = []
-
-        # Efficiency collection
-        efficiency_repo = repo_path / "apns-efficiency-v1"
-        efficiency_repo.mkdir()
-        (efficiency_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
-        (efficiency_repo / "Orbitals").symlink_to(orbital_efficiency_dir, target_is_directory=True)
-        collections_to_create.append(
-            {
-                "name": "apns-efficiency-v1",
-                "set_name": "apns-efficiency-v1",
-                "description": "APNS efficiency orbital collection (v1) - all variants",
-            }
-        )
-
-        # Precision collection (if available)
-        if orbital_precision_dir:
-            precision_repo = repo_path / "apns-precision-v1"
-            precision_repo.mkdir()
-            (precision_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
-            (precision_repo / "Orbitals").symlink_to(orbital_precision_dir, target_is_directory=True)
-            collections_to_create.append(
-                {
-                    "name": "apns-precision-v1",
-                    "set_name": "apns-precision-v1",
-                    "description": "APNS precision orbital collection (v1) - all variants",
-                }
-            )
-
-        echo.echo_info(f"Will create {len(collections_to_create)} orbital collections")
-
-        # Import each collection
-        created_collections = []
-        for collection_info in collections_to_create:
-            collection_name = collection_info["name"]
-            set_name = collection_info["set_name"]
-            description = collection_info["description"]
-
-            # Check if collection already exists
-            try:
-                existing_collection = load_group(label=collection_name)
-                echo.echo_warning(
-                    f"Collection '{collection_name}' already exists with {existing_collection.count()} orbitals"
-                )
-                if click.confirm(f"Do you want to skip importing '{collection_name}'?", default=True):
-                    continue
-                else:
-                    echo.echo_info(f"Re-importing '{collection_name}'")
-            except Exception:
-                echo.echo_info(f"Creating new collection '{collection_name}'")
-
-            try:
-                echo.echo(f"Importing {collection_name}...")
-                with cli_spinner():
-                    collection = AtomicOrbitalCollection.import_orbital_set(
-                        repository=repo_path,
-                        set_name=set_name,
-                        dryrun=False,
-                        group_label=collection_name,
-                    )
-
-                if collection is not None:
-                    collection.description = description
-                    created_collections.append((collection_name, collection.count()))
-                    echo.echo_success(
-                        f"Successfully imported collection '{collection_name}' with {collection.count()} orbitals"
-                    )
-                else:
-                    echo.echo_info(f"Collection '{collection_name}' already up to date")
-
-            except Exception as e:
-                echo.echo_error(f"Failed to import collection '{collection_name}': {e}")
-                if not click.confirm("Continue with other collections?", default=True):
-                    break
-
-        if created_collections:
-            echo.echo("")
-            echo.echo_success("Import process completed!")
-            echo.echo_info("Created collections:")
-            for coll_name, count in created_collections:
-                echo.echo(f"  - {coll_name}: {count} orbitals")
-            echo.echo("")
-            echo.echo_info("Next steps:")
-            echo.echo("  1. List collections: aiida-abacus pseudos list-collections")
-            echo.echo("  2. Show collection details: aiida-abacus pseudos show-collection <label>")
-            echo.echo(
-                "  3. Create family: aiida-abacus pseudos create-family <collection> <family> "
-                "--orbital-type dzp --rcuts <json>"
-            )
-        else:
-            echo.echo_info("No new collections were created")
+        # New behavior: local path import
+        _install_from_local_paths(paths=sources, label=label, description=description, dry_run=dry_run)
