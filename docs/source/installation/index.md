@@ -110,23 +110,47 @@ For More detailed information about setting up computer & code, please refer to 
 
 ### Setup pseudopotential family
 
-ABACUS calculation requires pseudo potentials, and we use the `aiida-pseudo` package to provide a simple way to manage and use pseudo potentials. It is a dependency of `aiida-abacus` and should be installed when you install `aiida-abacus` with `pip`, or it can be installed with:
+ABACUS calculations require pseudopotentials (for both `basis_type: pw` and `basis_type: lcao`). For LCAO calculations, numerical atomic orbitals are also required. We provide the `aiida-abacus pseudos` command group for managing these resources.
 
-```bash
-$ pip install aiida-pseudo
-```
+#### Quick start with aiida-pseudo
 
-After that, a pseudo potential _family_ can be installed by:
+For standard DFT pseudopotential families (UPF format only), use `aiida-pseudo`:
+
 ```bash
 $ aiida-pseudo install pseudo-dojo -f upf -v 0.4 -x PBE -r SR -p standard
 ```
 
-You may want to use the pseudo potential family later in the script and the corresponding pseudo family can be loaded once installed.
+You can then load the family in your scripts:
 ```python
+from aiida.orm import load_group
 pseudo_family = load_group("PseudoDojo/0.4/PBE/SR/standard/upf")
 ```
 
-See [aiida-pseudo](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for a complete list of pesudo potential families.
+#### Using ABACUS-specific pseudopotentials and orbitals
+
+For ABACUS LCAO calculations (`basis_type: lcao`), you need both pseudopotentials (.upf) and numerical atomic orbitals (.orb). Use the `aiida-abacus pseudos` commands to manage these:
+
+```bash
+# List available pseudopotential sets
+$ aiida-abacus pseudos list-sets
+
+# Install APNS efficiency/precision set (includes both pseudos and orbitals)
+$ aiida-abacus pseudos install-collection apns-efficiency/precision-v1
+
+# Create a calculation-ready family from the collection
+$ aiida-abacus pseudos create-family apns-efficiency-v1 my-abacus-family
+```
+
+:::{tip}
+The `aiida-abacus pseudos` workflow:
+1. **Collections** store ALL orbital variants for each element
+2. **Families** contain ONE orbital per element (ready for calculations)
+3. Use `create-family` to select specific variants from a collection
+:::
+
+For detailed usage including local file imports and interactive variant selection, see [How to manage pseudopotentials and orbitals](../howto/pseudos/index.md).
+
+See [aiida-pseudo documentation](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for more pseudopotential families.
 
 ## Note
 

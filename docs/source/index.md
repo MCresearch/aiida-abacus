@@ -19,6 +19,7 @@ tutorials/index
 :caption: How to
 
 howto/check/index
+howto/pseudos/index
 howto/calculations/index
 howto/workflows/index
 ```
@@ -43,6 +44,9 @@ topics/workflows/index
 ```{toctree}
 :hidden: true
 :caption: Reference
+
+cli
+reference/index
 reference/api/auto/aiida_abacus/index
 ```
 
