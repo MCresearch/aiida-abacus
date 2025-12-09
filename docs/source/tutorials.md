@@ -305,6 +305,12 @@ $ source .venv/bin/deactivate
 
     :::
 
+    :::{tip}
+    **Using ABACUS-specific orbitals:**
+    For calculations requiring numerical atomic orbitals beyond standard pseudopotentials,
+    use the `aiida-abacus pseudos` commands. See [How to manage pseudopotentials and orbitals](howto/pseudos.md) for details.
+    :::
+
 <!-- :::{important}
 Make sure that all the environments are ready here before we start the calculation:
 - [aiida-core](https://aiida.readthedocs.io/projects/aiida-core/en/stable/installation/guide_quick.html) configured.

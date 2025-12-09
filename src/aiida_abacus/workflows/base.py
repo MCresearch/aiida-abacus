@@ -31,11 +31,13 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
     """
 
     _process_class = AbacusCalculation
+    _protocol_tag = "base"
 
     @classmethod
-    def get_protocol_filepath(cls) -> pathlib.Path:
+    def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
         """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
-        return pathlib.Path(__file__).parent.parent / "protocols/base.yaml"
+        # Use the enhanced ProtocolMixin's get_protocol_filepath method
+        return super().get_protocol_filepath(file_alias)
 
     @classmethod
     def define(cls, spec):
@@ -179,6 +181,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         self.ctx.inputs.parameters = self.ctx.inputs.parameters.get_dict()
         if "pseudo_family" in self.inputs:
+            # NOTE: cutoff_rho is not used here
             pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
                 self.inputs.abacus.structure, self.inputs.pseudo_family.value
             )
@@ -337,8 +340,9 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     return kpoints
 
 
-def check_pseudo_family(family_name: Union[str, orm.Str]):
+def check_pseudo_family(family_name: Union[str, orm.Str], port=None):
     """Check the existence of a pseudo family"""
+    _ = port
     if isinstance(family_name, orm.Str):
         family_name = family_name.value
     try:
@@ -374,7 +378,8 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
     try:
         family = GroupFactory("pseudo.family.pseudo_dojo")
         cutoffs = GroupFactory("pseudo.family.cutoffs")
-        pseudo_set = (family, cutoffs)
+        normal = GroupFactory("pseudo.family")
+        pseudo_set = (family, cutoffs, normal)
         pseudo_family = orm.QueryBuilder().append(pseudo_set, filters={"label": pseudo_family_name}).one()[0]
     except exceptions.NotExistent as exception:
         raise ValueError(
@@ -382,12 +387,14 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
             "install it."
         ) from exception
 
-    try:
-        cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
-        pseudos = pseudo_family.get_pseudos(structure=structure)
-    except ValueError as exception:
-        raise ValueError(
-            f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
-        ) from exception
-    # TODO - support for SSSP and other families
+    pseudos = pseudo_family.get_pseudos(structure=structure)
+    cutoff_wfc = None
+    cutoff_rho = None
+    if hasattr(pseudo_family, "get_recommended_cutoffs"):
+        try:
+            cutoff_wfc, cutoff_rho = pseudo_family.get_recommended_cutoffs(structure=structure, unit="Ry")
+        except ValueError as exception:
+            raise ValueError(
+                f"failed to obtain recommended cutoffs for pseudo family `{pseudo_family}`: {exception}"
+            ) from exception
     return pseudos, cutoff_wfc, cutoff_rho

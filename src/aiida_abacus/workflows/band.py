@@ -17,9 +17,11 @@ from .base import AbacusBaseWorkChain
 from .relax import AbacusRelaxWorkChain
 
 
-class AbacusBandWorkChain(WorkChain, ProtocolMixin):
+class AbacusBandWorkChain(ProtocolMixin, WorkChain):
     """
     Workflow for performing band structure calculation"""
+
+    _protocol_tag = "band"
 
     @classmethod
     def define(cls, spec):
@@ -78,9 +80,10 @@ class AbacusBandWorkChain(WorkChain, ProtocolMixin):
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
 
     @classmethod
-    def get_protocol_filepath(cls) -> pathlib.Path:
+    def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
         """Return the ``pathlib.Path`` to the ``.yaml`` file that defines the protocols."""
-        return pathlib.Path(__file__).parent.parent / "protocols/band.yaml"
+        # Use the enhanced ProtocolMixin's get_protocol_filepath method
+        return super().get_protocol_filepath(file_alias)
 
     @classmethod
     def get_builder_from_protocol(

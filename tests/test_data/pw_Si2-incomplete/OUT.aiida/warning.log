@@ -1,0 +1,131 @@
+ AUTO_SET NBANDS to 14
+                            startmag_type = 2
+                       charge from rho_at = 4
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8
+           total electron number from rho = 8
+                                should be = 8
+                 charge before normalized = 7.99999999999997
+                  charge after normalized = 8.00000000000003
+ scf  warning : Threshold on eigenvalues was too large.
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 7.99999999999955
+           total electron number from rho = 7.99999999999955
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000015
+           total electron number from rho = 8.00000000000015
+                                should be = 8
+                 charge before normalized = 7.99999999993178
+                  charge after normalized = 8.00000000000009
+ scf  warning : Threshold on eigenvalues was too large.
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000015
+           total electron number from rho = 8.00000000000015
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000059
+           total electron number from rho = 8.00000000000059
+                                should be = 8
+                 charge before normalized = 8.00000000014067
+                  charge after normalized = 8.00000000000001
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000059
+           total electron number from rho = 8.00000000000059
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 7.99999999999967
+           total electron number from rho = 7.99999999999967
+                                should be = 8
+                 charge before normalized = 8.00000000013015
+                  charge after normalized = 8.00000000000034
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 7.99999999999967
+           total electron number from rho = 7.99999999999967
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000023
+           total electron number from rho = 8.00000000000023
+                                should be = 8
+                 charge before normalized = 7.99999999988077
+                  charge after normalized = 7.99999999999944
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000023
+           total electron number from rho = 8.00000000000023
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000047
+           total electron number from rho = 8.00000000000047
+                                should be = 8
+                 charge before normalized = 8.00000000013833
+                  charge after normalized = 7.99999999999995
+ scf  warning : Threshold on eigenvalues was too large.
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000047
+           total electron number from rho = 8.00000000000047
+                                should be = 8
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000042
+           total electron number from rho = 8.00000000000042
+                                should be = 8
+                 charge before normalized = 7.99999999976943
+                  charge after normalized = 7.99999999999944
+ scf  warning : Threshold on eigenvalues was too large.
+                            startmag_type = 2
+                       charge from rho_at = 3.99999754034073
+                         charge should be = 4
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 8.00000000000042
+           total electron number from rho = 8.00000000000042
+                                should be = 8

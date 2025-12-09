@@ -26,7 +26,9 @@ dependencies = [
     "voluptuous",
     "ase",
     "pydantic",
-    "tqdm"
+    "tqdm",
+    "click-spinner",
+    "tabulate"
 ]
 
 [project.optional-dependencies]
@@ -81,6 +83,9 @@ Source = "https://github.com/MCresearch/aiida-abacus"
 
 [project.entry-points."aiida.cmdline.data"]
 "abacus" = "aiida_abacus.cli:data_cli"
+
+[project.scripts]
+"aiida-abacus" = "aiida_abacus.commands:cmd_aiida_abacus"
 
 [tool.pytest.ini_options]
 # Configuration for [pytest](https://docs.pytest.org)
