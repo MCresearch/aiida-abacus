@@ -148,7 +148,7 @@ The `aiida-abacus pseudos` workflow:
 3. Use `create-family` to select specific variants from a collection
 :::
 
-For detailed usage including local file imports and interactive variant selection, see [How to manage pseudopotentials and orbitals](../howto/pseudos/index.md).
+For detailed usage including local file imports and interactive variant selection, see [How to manage pseudopotentials and orbitals](howto/pseudos.md).
 
 See [aiida-pseudo documentation](https://aiida-pseudo.readthedocs.io/en/latest/index.html) for more pseudopotential families.
 

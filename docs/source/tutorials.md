@@ -308,7 +308,7 @@ $ source .venv/bin/deactivate
     :::{tip}
     **Using ABACUS-specific orbitals:**
     For calculations requiring numerical atomic orbitals beyond standard pseudopotentials,
-    use the `aiida-abacus pseudos` commands. See [How to manage pseudopotentials and orbitals](../howto/pseudos/index.md) for details.
+    use the `aiida-abacus pseudos` commands. See [How to manage pseudopotentials and orbitals](howto/pseudos.md) for details.
     :::
 
 <!-- :::{important}

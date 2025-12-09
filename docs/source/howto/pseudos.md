@@ -3,7 +3,7 @@
 # Managing Pseudopotentials and Orbitals
 
 :::{seealso}
-For a complete command reference, see the [CLI Documentation](../../cli.md).
+For a complete command reference, see the [CLI Documentation](../cli.md).
 :::
 
 This guide explains how to use the `aiida-abacus pseudos` command group to manage ABACUS pseudopotentials and numerical atomic orbitals.
@@ -495,8 +495,8 @@ Warning: No .orb files found in /path/to/orbitals
 
 ## See Also
 
-- [Installation Guide](../../installation/index.md) - Setting up aiida-abacus
-- [Check Results](../check/index.md) - Verifying calculations
+- [Installation Guide](../installation.md) - Setting up aiida-abacus
+- [Check Results](check.md) - Verifying calculations
 - [ABACUS Documentation](https://abacus.deepmodeling.com/) - ABACUS DFT package docs
 - [aiida-pseudo](https://aiida-pseudo.readthedocs.io/) - Standard pseudopotential management
 - [APNS Database](https://aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1) - ABACUS pseudopotential and orbital database

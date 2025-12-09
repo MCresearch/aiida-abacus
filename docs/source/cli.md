@@ -14,5 +14,5 @@ The `aiida-abacus` command provides tools for managing ABACUS pseudopotentials a
 
 ## See Also
 
-- [Managing Pseudopotentials and Orbitals](howto/pseudos/index.md) - Detailed how-to guide with examples
-- [Installation Guide](installation/index.md) - Setting up aiida-abacus
+- [Managing Pseudopotentials and Orbitals](howto/pseudos.md) - Detailed how-to guide with examples
+- [Installation Guide](installation.md) - Setting up aiida-abacus

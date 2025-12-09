@@ -8,54 +8,45 @@ myst:
 
 ```{toctree}
 :hidden: true
-:caption: Getting started
+:caption: Getting Started
 
-installation/index
-tutorials/index
+installation
+tutorials
 ```
 
 ```{toctree}
 :hidden: true
-:caption: How to
+:caption: How-to Guides
 
-howto/check/index
-howto/pseudos/index
-howto/calculations/index
-howto/workflows/index
+howto/check
+howto/pseudos
+howto/calculations
+howto/workflows
 ```
-<!-- howto/calculations/index
-howto/workflows/index -->
 
 ```{toctree}
 :hidden: true
-:caption: Guides
+:caption: Concepts
 
-guides/index
-guides/useful_information
+concepts/index
 ```
-
-<!-- ```{toctree}
-:hidden: true
-:caption: Topic guides
-topics/calculations/index
-topics/workflows/index
-``` -->
 
 ```{toctree}
 :hidden: true
 :caption: Reference
 
-cli
 reference/index
+cli
+reference/resources
 reference/api/auto/aiida_abacus/index
 ```
 
-<!-- ```{toctree}
+```{toctree}
 :hidden: true
-:caption: Reference
-reference/api/index
-reference/cli/index
-``` -->
+:caption: Contributing
+
+contributing
+```
 
 # AiiDA-ABACUS
 
