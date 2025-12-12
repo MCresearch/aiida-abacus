@@ -35,10 +35,19 @@ def test_no_constraints_returns_none():
     assert atoms_to_move_list(atoms) is None
 
 
-# FixScaled tests
-def test_fixscaled_basic(h3_atoms):
-    """Test FixScaled with partial constraints."""
+# FixScaled tests - should raise error
+def test_fixscaled_raises_error(h3_atoms):
+    """Test that FixScaled constraint raises an error."""
     h3_atoms.set_constraint(FixScaled([1], mask=(True, False, True)))
+
+    with pytest.raises(InputValidationError, match="FixScaled constraint is not supported"):
+        atoms_to_move_list(h3_atoms)
+
+
+# FixCartesian tests
+def test_fixcartesian_basic(h3_atoms):
+    """Test FixCartesian with partial constraints."""
+    h3_atoms.set_constraint(FixCartesian([1], mask=(True, False, True)))
 
     move_list = atoms_to_move_list(h3_atoms)
 
@@ -47,36 +56,15 @@ def test_fixscaled_basic(h3_atoms):
     np.testing.assert_array_equal(move_list[2], [True, True, True])
 
 
-def test_fixscaled_mask_inversion():
+def test_fixcartesian_mask_inversion():
     """Test ASE mask convention (True=fixed) inverts to ABACUS (True=movable)."""
     atoms = Atoms("H2", positions=[[0, 0, 0], [1, 0, 0]], cell=[5, 5, 5])
-    atoms.set_constraint(FixScaled([1], mask=(True, True, False)))
+    atoms.set_constraint(FixCartesian([1], mask=(True, True, False)))
 
     move_list = atoms_to_move_list(atoms)
 
     # ASE mask (True, True, False) = fix x,y → ABACUS (False, False, True)
     np.testing.assert_array_equal(move_list[1], [False, False, True])
-
-
-# FixCartesian tests
-def test_fixcartesian_orthogonal():
-    """Test FixCartesian with orthogonal cell issues warning."""
-    atoms = Atoms("H2", positions=[[0, 0, 0], [1, 0, 0]], cell=[5, 5, 5])
-    atoms.set_constraint(FixCartesian([1], mask=(True, False, True)))
-
-    with pytest.warns(UserWarning, match="FixCartesian"):
-        move_list = atoms_to_move_list(atoms)
-
-    np.testing.assert_array_equal(move_list[1], [False, True, False])
-
-
-def test_fixcartesian_nonorthogonal_raises():
-    """Test FixCartesian with non-orthogonal cell raises error."""
-    atoms = Atoms("H2", positions=[[0, 0, 0], [1, 0, 0]], cell=[[5, 0, 0], [1, 5, 0], [0, 0, 5]])
-    atoms.set_constraint(FixCartesian([0], mask=(True, False, False)))
-
-    with pytest.raises(InputValidationError, match="non-orthogonal"):
-        atoms_to_move_list(atoms)
 
 
 # Multiple constraints
@@ -93,10 +81,10 @@ def test_multiple_fixatoms():
     assert not np.any(move_list[3])  # Fixed
 
 
-def test_mixed_fixatoms_and_fixscaled():
-    """Test FixAtoms + FixScaled combine correctly."""
+def test_mixed_fixatoms_and_fixcartesian():
+    """Test FixAtoms + FixCartesian combine correctly."""
     atoms = Atoms("H4", positions=[[i, 0, 0] for i in range(4)], cell=[5, 5, 5])
-    atoms.set_constraint([FixAtoms(indices=[0]), FixScaled([1], mask=(False, True, False))])
+    atoms.set_constraint([FixAtoms(indices=[0]), FixCartesian([1], mask=(False, True, False))])
 
     move_list = atoms_to_move_list(atoms)
 
@@ -105,13 +93,13 @@ def test_mixed_fixatoms_and_fixscaled():
     np.testing.assert_array_equal(move_list[2], [True, True, True])
 
 
-def test_overlapping_constraints():
-    """Test overlapping constraints use union of restrictions."""
+def test_overlapping_fixcartesian_constraints():
+    """Test overlapping FixCartesian constraints use union of restrictions."""
     atoms = Atoms("H2", positions=[[0, 0, 0], [1, 0, 0]], cell=[5, 5, 5])
     atoms.set_constraint(
         [
-            FixScaled([1], mask=(True, False, False)),  # Fix x
-            FixScaled([1], mask=(False, True, False)),  # Fix y
+            FixCartesian([1], mask=(True, False, False)),  # Fix x
+            FixCartesian([1], mask=(False, True, False)),  # Fix y
         ]
     )
 

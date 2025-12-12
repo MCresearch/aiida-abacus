@@ -24,6 +24,8 @@ builder.dynamics = atoms  # This converts constraints to ABACUS format
 
 ### Supported Constraint Types
 
+AiiDA-ABACUS supports two ASE constraint types. ABACUS selective dynamics operates in Cartesian directions.
+
 #### FixAtoms
 
 Fixes all three directions (x, y, z) for specified atoms:
@@ -37,51 +39,35 @@ atoms.set_constraint(FixAtoms(indices=[0, 1, 2]))
 
 **Use case:** Surface slabs where you want to fix the bottom layers that represent the bulk substrate.
 
-#### FixScaled
+#### FixCartesian
 
-Fixes specific fractional (direct) coordinate directions:
+Fixes specific Cartesian directions:
 
 ```python
-from ase.constraints import FixScaled
+from ase.constraints import FixCartesian
 
-# Fix x and z directions, allow y
-atoms.set_constraint(FixScaled(
-    indices=[5, 6],
-    mask=(True, False, True)  # True = fixed, False = movable
+# Fix x and y directions, allow z
+atoms.set_constraint(FixCartesian(
+    indices=[3, 4],
+    mask=(True, True, False)  # True = fixed, False = movable
 ))
 ```
 
 **Important:** ASE uses `True=fixed`, but ABACUS uses `1=movable`. The conversion is automatic.
 
-**Use case:** Constraining motion along specific crystallographic directions, such as fixing the z-coordinate for surface atoms while allowing xy relaxation.
+**Use case:** Constraining motion along specific Cartesian directions, such as fixing the z-coordinate for surface atoms while allowing xy relaxation.
 
-#### FixCartesian
-
-Fixes specific Cartesian directions (only for orthogonal cells):
-
-```python
-from ase.constraints import FixCartesian
-
-# Fix x and y directions, allow z (requires orthogonal cell)
-atoms.set_constraint(FixCartesian(
-    indices=[3, 4],
-    mask=(True, True, False)
-))
-```
-
-**Warning:** ABACUS selective dynamics operates in fractional coordinates. `FixCartesian` only works correctly when cell vectors are aligned with Cartesian axes. For non-orthogonal cells, use `FixScaled` instead.
-
-**Use case:** When working with orthogonal cells and you need to constrain movement in Cartesian x, y, or z directions.
+**Note:** FixScaled is NOT supported - ABACUS selective dynamics uses Cartesian directions. Use FixCartesian instead.
 
 ### Multiple Constraints
 
 You can combine multiple constraints - restrictions are accumulated (union):
 
 ```python
-from ase.constraints import FixAtoms, FixScaled
+from ase.constraints import FixAtoms, FixCartesian
 
 constraint1 = FixAtoms(indices=[0, 1])  # Fix atoms 0, 1 completely
-constraint2 = FixScaled([2, 3], mask=(False, False, True))  # Fix z for atoms 2, 3
+constraint2 = FixCartesian([2, 3], mask=(False, False, True))  # Fix z for atoms 2, 3
 
 atoms.set_constraint([constraint1, constraint2])
 ```
@@ -161,14 +147,6 @@ Si
 
 ### Troubleshooting
 
-**Issue:** `FixCartesian` raises error about non-orthogonal cell
-
-**Solution:** Use `FixScaled` instead, which works with fractional coordinates:
-```python
-# Instead of FixCartesian
-atoms.set_constraint(FixScaled(indices=[...], mask=(True, False, True)))
-```
-
 **Issue:** Constraints not being applied
 
 **Solution:** Make sure you're passing ASE Atoms to `builder.dynamics`.
@@ -176,7 +154,7 @@ atoms.set_constraint(FixScaled(indices=[...], mask=(True, False, True)))
 
 **Issue:** Error about specifying 'm' flags in both dynamics and parameters
 
-**Solution:** You cannot specify selective dynamics in both places. 
+**Solution:** You cannot specify selective dynamics in both places. Choose one method: either `builder.dynamics` (recommended) or `parameters["stru"]["m"]` (legacy).
 
 **Issue:** How to check if constraints were converted correctly?
 

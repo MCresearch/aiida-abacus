@@ -1,13 +1,12 @@
 """
 Utilities for converting ASE constraints to ABACUS "m" key in STRU file.
 
-This module provides functions to convert ASE constraint objects (FixAtoms, FixScaled, FixCartesian)
+This module provides functions to convert ASE constraint objects (FixAtoms, FixCartesian)
 into ABACUS's "m" key in the STRU file.
 """
 
 from __future__ import annotations
 
-import warnings
 from typing import Union
 
 import numpy as np
@@ -18,36 +17,11 @@ from ase import Atoms
 from ase.constraints import FixAtoms, FixCartesian, FixScaled
 
 
-def _is_cell_orthogonal(cell: np.ndarray, tol: float = 1e-6) -> bool:
-    """
-    Check if cell vectors are aligned with Cartesian x, y, z axes.
-
-    :param cell: Cell vectors as (3, 3) array
-    :type cell: np.ndarray
-    :param tol: Tolerance for considering off-diagonal elements as zero
-    :type tol: float
-    :returns: True if cell is orthogonal (aligned with Cartesian axes)
-    :rtype: bool
-    """
-    # Check if cell is diagonal (off-diagonal elements should be ~0)
-    # Cell format: [[a_x, a_y, a_z], [b_x, b_y, b_z], [c_x, c_y, c_z]]
-    # For orthogonal: a_y, a_z, b_x, b_z, c_x, c_y should be ~0
-    off_diagonal = [
-        cell[0, 1],
-        cell[0, 2],  # a_y, a_z
-        cell[1, 0],
-        cell[1, 2],  # b_x, b_z
-        cell[2, 0],
-        cell[2, 1],  # c_x, c_y
-    ]
-    return all(abs(val) < tol for val in off_diagonal)
-
-
 def atoms_to_move_list(atoms: Atoms) -> np.ndarray | None:
     """
     Convert ASE constraints to ABACUS move_list format.
 
-    This function extracts FixAtoms, FixScaled, and FixCartesian constraints from an ASE Atoms object
+    This function extracts FixAtoms and FixCartesian constraints from an ASE Atoms object
     and converts them to ABACUS's selective dynamics format (the "m" keyword in STRU file).
     Multiple constraints are properly accumulated using a union of restrictions.
 
@@ -57,18 +31,14 @@ def atoms_to_move_list(atoms: Atoms) -> np.ndarray | None:
         can move in that direction (ABACUS convention: True→1, False→0), False means fixed.
         Returns None if no constraints are present.
     :rtype: np.ndarray | None
-    :raises InputValidationError: If an unsupported constraint type is encountered or if
-        FixCartesian is used with non-orthogonal cells
+    :raises InputValidationError: If an unsupported constraint type is encountered (e.g., FixScaled)
 
     .. note::
-        - Supports FixAtoms (fixes all 3 directions), FixScaled (fixes specific
-          fractional directions), and FixCartesian (fixes Cartesian directions).
+        - Supports FixAtoms (fixes all 3 directions) and FixCartesian (fixes Cartesian directions).
         - ASE mask convention (True=fixed) is automatically inverted to ABACUS
           convention (True=movable, converted to 1 in STRU file).
-        - ABACUS selective dynamics operates in fractional (direct) coordinates.
-        - FixCartesian only works correctly when cell vectors are aligned with
-          Cartesian axes. A warning is issued if used, and an error is raised if
-          the cell is not orthogonal.
+        - ABACUS selective dynamics operates in Cartesian directions.
+        - FixScaled is NOT supported - use FixCartesian instead.
         - Multiple constraints on the same atom are accumulated (union of restrictions).
 
     Example::
@@ -99,44 +69,22 @@ def atoms_to_move_list(atoms: Atoms) -> np.ndarray | None:
             move_list[indices, :] = False
 
         elif isinstance(constraint, FixScaled):
-            # FixScaled: fix specific fractional directions
-            # CRITICAL: ASE mask convention is opposite to ABACUS
-            # ASE: True = fixed, False = movable
-            # ABACUS: True = movable, False = fixed (converted to 1/0 in STRU file)
+            # FixScaled is NOT supported - ABACUS selective dynamics uses Cartesian directions
+            raise InputValidationError(
+                "FixScaled constraint is not supported for ABACUS calculations. "
+                "ABACUS selective dynamics operates in Cartesian directions. "
+                "Please use FixCartesian instead to constrain specific Cartesian directions."
+            )
+
+        elif isinstance(constraint, FixCartesian):
+            # FixCartesian: fix specific Cartesian directions
+            # ABACUS selective dynamics operates in Cartesian directions
+            # ASE mask convention: True = fixed, False = movable
+            # ABACUS convention: True = movable, False = fixed (converted to 1/0 in STRU file)
             indices = constraint.get_indices()
             mask = constraint.mask  # ASE convention: True = fixed
 
             # Invert mask: where ASE mask is True (fixed), set ABACUS move flag to False (fixed)
-            move_list[indices, mask] = False
-
-        elif isinstance(constraint, FixCartesian):
-            # FixCartesian: fix specific Cartesian directions
-            # WARNING: ABACUS selective dynamics works in fractional coordinates!
-            # This only works correctly if cell vectors are aligned with Cartesian axes
-
-            # Check if cell is orthogonal
-            cell = atoms.get_cell()
-            if not _is_cell_orthogonal(cell):
-                raise InputValidationError(
-                    "FixCartesian constraint cannot be used with non-orthogonal cells. "
-                    "ABACUS selective dynamics operates in fractional coordinates. "
-                    "For non-orthogonal cells, use FixScaled instead or ensure your "
-                    "cell vectors are aligned with x, y, z axes."
-                )
-
-            # Issue warning about fractional vs Cartesian
-            warnings.warn(
-                "FixCartesian constraint is being converted to ABACUS selective dynamics. "
-                "Note that ABACUS selective dynamics operates in fractional (direct) coordinates. "
-                "This conversion assumes your cell vectors are aligned with Cartesian x, y, z axes. "
-                "Consider using FixScaled for explicit fractional coordinate control.",
-                UserWarning,
-                stacklevel=2,
-            )
-
-            # Treat like FixScaled with same logic
-            indices = constraint.get_indices()
-            mask = constraint.mask  # ASE convention: True = fixed
             move_list[indices, mask] = False
 
         else:
@@ -144,7 +92,7 @@ def atoms_to_move_list(atoms: Atoms) -> np.ndarray | None:
             constraint_type = type(constraint).__name__
             raise InputValidationError(
                 f"Unsupported constraint type '{constraint_type}'. "
-                f"Only FixAtoms, FixScaled, and FixCartesian are supported for ABACUS selective dynamics. "
+                f"Only FixAtoms and FixCartesian are supported for ABACUS selective dynamics. "
                 f"For complex constraints, manually specify the 'dynamics' port with a move_list array."
             )
 
@@ -166,9 +114,9 @@ def serialize_dynamics(atoms: Union[Atoms, dict]) -> orm.Dict | None:
     :rtype: orm.Dict | None
 
     .. note::
-        Handles FixAtoms, FixScaled, and FixCartesian constraints. Multiple constraints
-        are properly accumulated (union of restrictions). FixCartesian requires
-        orthogonal cells.
+        Handles FixAtoms and FixCartesian constraints. Multiple constraints
+        are properly accumulated (union of restrictions). FixScaled is NOT
+        supported - use FixCartesian instead.
 
         The output format is: ``{"m": [[bool, bool, bool], ...]}`` where True means
         movable (converted to 1 in STRU file) and False means fixed (converted to 0),
