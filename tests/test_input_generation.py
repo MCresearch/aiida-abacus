@@ -318,3 +318,122 @@ class TestInputFileGeneration:
         with open(stru_path, "r") as f:
             stru_content = f.read()
         assert "m 1 1 1" in stru_content
+
+    def test_dynamics_port_with_ase_constraints(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that ASE constraints via dynamics port are correctly converted to STRU 'm' flags."""
+        from aiida_abacus.utils import serialize_dynamics
+        from ase import Atoms
+        from ase.constraints import FixAtoms
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Basic parameters WITHOUT 'm' flags
+        parameters = {
+            "input": {
+                "basis_type": "pw",
+                "ecutwfc": 60,
+                "scf_thr": 1e-7,
+                "calculation": "scf",
+            },
+            "stru": {},  # No 'm' here - will come from dynamics
+        }
+        inputs.parameters = orm.Dict(parameters)
+
+        # Create ASE Atoms with constraints - fix first atom
+        positions = [site.position for site in si_structure.sites]
+        symbols = [site.kind_name for site in si_structure.sites]
+        cell = si_structure.cell
+        atoms = Atoms(symbols=symbols, positions=positions, cell=cell)
+        atoms.set_constraint(FixAtoms(indices=[0]))
+
+        # Use dynamics port with ASE Atoms
+        inputs.dynamics = serialize_dynamics(atoms)
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        # Instantiate process
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        # Generate STRU content
+        stru_content, _ = process.generate_structure(si_structure, inputs.pseudos, {})  # Empty stru parameters
+
+        # Verify STRU contains correct 'm' flags
+        # First atom should be "m 0 0 0" (fixed)
+        # Second atom should be "m 1 1 1" (movable)
+        assert "m 0 0 0" in stru_content  # First atom fixed
+        assert "m 1 1 1" in stru_content  # Second atom movable
+
+    def test_dynamics_port_conflicts_with_parameters_raises_error(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that specifying 'm' in both dynamics and parameters raises an error."""
+        from aiida.common.exceptions import InputValidationError
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Parameters with 'm' specified
+        num_sites = len(si_structure.sites)
+        parameters = {
+            "input": {"basis_type": "pw", "ecutwfc": 60, "calculation": "scf"},
+            "stru": {"m": [[True, True, True]] * num_sites},
+        }
+        inputs.parameters = orm.Dict(parameters)
+
+        # Dynamics port also has 'm' - this should raise an error
+        inputs.dynamics = orm.Dict({"m": [[False, False, False]] + [[True, True, True]] * (num_sites - 1)})
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        # Should raise InputValidationError when both sources provide 'm'
+        with pytest.raises(InputValidationError, match="both 'dynamics' port and parameters"):
+            process.generate_structure(si_structure, inputs.pseudos, parameters["stru"])
+
+    def test_legacy_parameters_still_works(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that legacy parameters['stru']['m'] approach still works (backwards compatibility)."""
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Legacy approach: specify 'm' in parameters
+        num_sites = len(si_structure.sites)
+        parameters = {
+            "input": {"basis_type": "pw", "ecutwfc": 60, "calculation": "scf"},
+            "stru": {"m": [[False, False, False]] + [[True, True, True]] * (num_sites - 1)},  # First atom fixed
+        }
+        inputs.parameters = orm.Dict(parameters)
+        # NO dynamics port provided
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        stru_content, _ = process.generate_structure(si_structure, inputs.pseudos, parameters["stru"])
+
+        # First atom should be fixed (from legacy parameters)
+        assert "m 0 0 0" in stru_content
+        assert "m 1 1 1" in stru_content
