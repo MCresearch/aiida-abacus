@@ -172,8 +172,91 @@ print(dynamics_dict.get_dict())
 - **ABACUS STRU format**: https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html
 - **ASE constraints**: https://wiki.fysik.dtu.dk/ase/ase/constraints.html
 
-### API Reference
+## Setting Initial Velocities for Molecular Dynamics
 
-For detailed API documentation, see:
-- `aiida_abacus.utils.atoms_to_move_list()` - Convert ASE constraints to move_list
-- `aiida_abacus.utils.serialize_dynamics()` - Serialize for builder.dynamics port
+aiida-abacus supports setting initial atomic velocities for molecular dynamics simulations.
+
+### Quick Start
+
+```python
+from aiida import orm
+
+# Create velocity list (one 3D vector per atom)
+velocities = [
+    [0.1, 0.0, 0.0],   # Atom 0: velocity in x direction
+    [0.0, 0.1, 0.0],   # Atom 1: velocity in y direction
+    [-0.1, 0.0, 0.1],  # Atom 2: mixed velocities
+]
+
+# Set via dynamics port (recommended)
+builder.dynamics = orm.Dict({"v": velocities})
+
+# Or combine with selective dynamics
+builder.dynamics = orm.Dict({
+    "m": [[True, True, True]] * 3,  # Move flags
+    "v": velocities                  # Initial velocities
+})
+```
+
+### Units and Conversion
+
+**Atomic Units:** ABACUS uses atomic units for velocities
+
+## Magnetic Moments (magmom)
+
+ABACUS supports setting initial magnetic moments for magnetic calculations. This feature is already implemented in aiida-abacus.
+
+### Quick Start
+
+```python
+# Set magnetic moments (one 3D vector per atom)
+# For collinear calculations, only one number should be given
+# For non-collinear, use [m_x, m_y, m_z]
+colinear_magnetic_moments = [
+    [1.0],   # Atom 0: spin up
+    [-1.0],  # Atom 1: spin down
+]
+none_colinear_magnetic_moments = [
+    [0.0, 0.0, 1.0],   # Atom 0: spin up in z
+    [0.0, 0.0, -1.0],  # Atom 1: spin down in z
+]
+
+builder.parameters = orm.Dict({
+    "input": {"nspin": 2, ...},
+    "stru": {
+        "mag": collinear_magnetic_moments  # or "magmom"
+    }
+})
+```
+
+### Alias Support
+
+Two aliases are supported: `mag` and `magmom`
+
+```python
+# These are equivalent
+parameters["stru"]["mag"] = magnetic_moments
+# Or use "magmom" is also OK
+parameters["stru"].pop("mag", None)
+parameters["stru"]["magmom"] = magnetic_moments
+```
+
+### STRU Format
+
+Magnetic moments are written after position and velocity:
+
+None-colinear case:
+```
+0.00 0.00 0.00 m 1 1 1 v 0.1 0.0 0.0 magmom 0.0 0.0 1.0
+```
+
+colinear case:
+```
+0.00 0.00 0.00 m 1 1 1 v 0.1 0.0 0.0 magmom 1.0
+```
+
+### Integration with nspin
+
+- `nspin = 1`: No spin polarization (magmom ignored)
+- `nspin = 2`: Collinear spin
+- `nspin = 4`: None-collinear spin, `noncolin=1` also needs to be set.

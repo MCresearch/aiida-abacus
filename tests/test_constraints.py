@@ -187,3 +187,43 @@ def test_boolean_to_abacus_format():
 
     expected = np.array([[1, 1, 1], [0, 0, 0], [1, 1, 1]])
     np.testing.assert_array_equal(abacus_flags, expected)
+
+
+# ==============================================================================
+# Velocity Tests
+# ==============================================================================
+
+
+def test_velocity_in_dynamics_dict(aiida_profile_clean):
+    """Test velocity can be specified in dynamics Dict."""
+    velocities = [[0.1, 0.0, 0.0], [0.0, 0.1, 0.0], [-0.1, 0.0, 0.0]]
+
+    dynamics_dict = {"v": velocities}
+    result = serialize_dynamics(dynamics_dict)
+
+    assert isinstance(result, orm.Dict)
+    assert result.get_dict()["v"] == velocities
+
+
+def test_velocity_with_move_flags(aiida_profile_clean):
+    """Test velocity and move flags can be combined."""
+    dynamics_dict = {
+        "m": [[True, True, True], [False, False, False], [True, True, True]],
+        "v": [[0.1, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.1, 0.0]],
+    }
+
+    result = serialize_dynamics(dynamics_dict)
+
+    assert isinstance(result, orm.Dict)
+    assert result.get_dict()["m"] == dynamics_dict["m"]
+    assert result.get_dict()["v"] == dynamics_dict["v"]
+
+
+def test_velocity_aliases(aiida_profile_clean):
+    """Test all velocity aliases are supported."""
+    velocities = [[0.1, 0.0, 0.0]]
+
+    for alias in ["v", "vel", "velocity"]:
+        dynamics_dict = {alias: velocities}
+        result = serialize_dynamics(dynamics_dict)
+        assert result.get_dict()[alias] == velocities

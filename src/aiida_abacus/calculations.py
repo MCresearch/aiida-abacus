@@ -110,8 +110,9 @@ class AbacusCalculation(CalcJob):
             help=(
                 "ABACUS parameters related to ionic dynamics. "
                 "Can be set directly from ASE Atoms with constraints: "
-                "builder.dynamics = atoms. Supports FixAtoms, FixScaled, and FixCartesian. "
-                "Contains the 'm' key for selective dynamics flags (move/fix atoms)."
+                "builder.dynamics = atoms. Supports FixAtoms and FixCartesian. "
+                "Contains the 'm' key for selective dynamics flags (move/fix atoms), "
+                "and 'v' key for initial velocities (molecular dynamics)."
             ),
             required=False,
         )
@@ -518,10 +519,78 @@ class AbacusCalculation(CalcJob):
             move_list = [[True, True, True]] * len(coordinates)
 
         ### BELOW are optional keywords!!!###
+        # KEYWORD v/vel/velocity: set initial velocities for each atom
+        # Units: atomic units (1 a.u. = 21.877 Angstrom/fs)
+        velocity_list = None
+        dynamics_v = None
+        parameters_v = None
+
+        # Check parameters for velocity aliases - raise error if multiple
+        velocity_aliases = ["v", "vel", "velocity"]
+        params_velocity_keys = [alias for alias in velocity_aliases if parameters.get(alias) is not None]
+        if len(params_velocity_keys) > 1:
+            raise exceptions.InputValidationError(
+                f"Multiple velocity aliases found in parameters['stru']: {params_velocity_keys}. "
+                "Please use only one: 'v', 'vel', or 'velocity'."
+            )
+        if params_velocity_keys:
+            parameters_v = parameters.get(params_velocity_keys[0])
+
+        # Check dynamics port for velocity aliases - raise error if multiple
+        if hasattr(self, "inputs") and "dynamics" in self.inputs:
+            dynamics_dict = self.inputs.dynamics.get_dict()
+            dynamics_velocity_keys = [alias for alias in velocity_aliases if dynamics_dict.get(alias) is not None]
+            if len(dynamics_velocity_keys) > 1:
+                raise exceptions.InputValidationError(
+                    f"Multiple velocity aliases found in dynamics port: {dynamics_velocity_keys}. "
+                    "Please use only one: 'v', 'vel', or 'velocity'."
+                )
+            if dynamics_velocity_keys:
+                dynamics_v = dynamics_dict.get(dynamics_velocity_keys[0])
+
+        # Raise error if both sources provide velocity
+        if dynamics_v is not None and parameters_v is not None:
+            raise exceptions.InputValidationError(
+                "Initial velocities specified in both 'dynamics' port and parameters['stru']. "
+                "Please use only one method. Recommended: use 'builder.dynamics' with Dict."
+            )
+
+        # Use velocity from dynamics or parameters
+        velocity_list = dynamics_v if dynamics_v is not None else parameters_v
+
+        # Validate velocity_list if provided
+        if velocity_list is not None:
+            if len(velocity_list) != len(coordinates):
+                raise exceptions.InputValidationError(
+                    f"Velocity list length ({len(velocity_list)}) does not match "
+                    f"number of atoms ({len(coordinates)})"
+                )
+            # Validate each velocity has 3 components
+            for i, vel in enumerate(velocity_list):
+                if not isinstance(vel, (list, tuple)) or len(vel) != 3:
+                    raise exceptions.InputValidationError(
+                        f"Velocity for atom {i} must be a list/tuple of 3 numbers, got: {vel}"
+                    )
+                # Validate numeric values
+                try:
+                    [float(v) for v in vel]
+                except (TypeError, ValueError) as e:
+                    raise exceptions.InputValidationError(
+                        f"Velocity for atom {i} contains non-numeric values: {vel}"
+                    ) from e
+
         # KEYWORD mag or magmom: set the start magnetization for each atom
         # set three number for the xyz commponent of magnetization here (e.g. mag 0.0 0.0 1.0).
 
-        magmom_list = parameters.get("mag") or parameters.get("magmom", [])  # default value for mag_x, mag_y, mag_z
+        # Check for multiple magmom aliases
+        magmom_aliases = ["mag", "magmom"]
+        magmom_keys = [alias for alias in magmom_aliases if parameters.get(alias) is not None]
+        if len(magmom_keys) > 1:
+            raise exceptions.InputValidationError(
+                f"Multiple magmom aliases found in parameters['stru']: {magmom_keys}. "
+                "Please use only one: 'mag' or 'magmom'."
+            )
+        magmom_list = parameters.get(magmom_keys[0], []) if magmom_keys else []
 
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
@@ -534,6 +603,11 @@ class AbacusCalculation(CalcJob):
             # Add the move flags
             flags = map(int, move_list[i])  # Ensure int type
             position.extend(["m", *flags])  # Set the move flag for geometry optimization
+
+            # Add velocity if provided
+            if velocity_list is not None:
+                vel_float = map(float, velocity_list[i])  # Ensure float type
+                position.extend(["v", *vel_float])  # Set initial velocity for molecular dynamics
 
             # each position is a line containing the following information:
             # In colinear case only one number should be given.

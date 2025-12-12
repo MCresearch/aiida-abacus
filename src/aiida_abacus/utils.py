@@ -122,6 +122,9 @@ def serialize_dynamics(atoms: Union[Atoms, dict]) -> orm.Dict | None:
         movable (converted to 1 in STRU file) and False means fixed (converted to 0),
         matching ABACUS's convention.
 
+        Additionally supports velocity through dict input: ``{"m": [...], "v": [...]}``
+        where the "v" key contains velocity vectors in atomic units (1 a.u. = 21.877 Å/fs).
+
     Example::
 
         >>> from ase.build import bulk
@@ -133,6 +136,17 @@ def serialize_dynamics(atoms: Union[Atoms, dict]) -> orm.Dict | None:
         >>>
         >>> # Direct usage with builder
         >>> builder.dynamics = serialize_dynamics(atoms)
+
+    Example with velocity::
+
+        >>> from aiida_abacus.utils import serialize_dynamics
+        >>> from aiida import orm
+        >>>
+        >>> # With velocities for molecular dynamics
+        >>> builder.dynamics = serialize_dynamics({
+        ...     "m": [[True, True, True]] * 4,
+        ...     "v": [[0.1, 0.0, 0.0]] * 4  # velocities in a.u.
+        ... })
     """
     if not isinstance(atoms, Atoms):
         return to_aiida_type(atoms)
