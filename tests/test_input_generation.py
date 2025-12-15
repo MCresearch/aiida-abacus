@@ -109,6 +109,172 @@ class TestInputFileGeneration:
         assert "ATOMIC_POSITIONS" in content
         assert "Cartesian" in content
 
+    def test_velocity_in_stru_file(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+    ):
+        """Test velocity values are written correctly to STRU file."""
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        num_atoms = len(si_structure.sites)
+        velocities = [[0.1, 0.0, 0.0]] * num_atoms
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
+        inputs.dynamics = orm.Dict({"v": velocities})
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+        process.prepare_for_submission(sandbox_folder)
+
+        stru_path = sandbox_folder.get_abs_path("STRU")
+        with open(stru_path, "r") as f:
+            content = f.read()
+
+        # Check velocity keyword appears
+        assert " v " in content
+        # Check velocity values
+        assert "0.1" in content
+
+        # Test using parameters port
+
+        num_atoms = len(si_structure.sites)
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {"v": [[1.0, 1.0, 1.0]] * num_atoms}})
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+        process.prepare_for_submission(sandbox_folder)
+
+        stru_path = sandbox_folder.get_abs_path("STRU")
+        with open(stru_path, "r") as f:
+            content = f.read()
+
+        # Should contain parameters velocity
+        lines = [line for line in content.split("\n") if " v " in line]
+        assert len(lines) > 0
+        assert "1.0" in lines[0]
+
+    def test_velocity_validation_wrong_length(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+    ):
+        """Test error when velocity list length doesn't match atoms."""
+        from aiida.common import exceptions
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
+        inputs.dynamics = orm.Dict({"v": [[0.1, 0.0, 0.0]]})  # Only 1 velocity
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        with pytest.raises(exceptions.InputValidationError, match="does not match number of atoms"):
+            process.prepare_for_submission(sandbox_folder)
+
+    def test_velocity_multiple_aliases(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+    ):
+        """Test error when multiple velocity aliases in dynamics port."""
+        from aiida.common import exceptions
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        num_atoms = len(si_structure.sites)
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
+        inputs.dynamics = orm.Dict({"v": [[0.1, 0.0, 0.0]] * num_atoms, "vel": [[0.2, 0.0, 0.0]] * num_atoms})
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+        with pytest.raises(exceptions.InputValidationError, match=r"Multiple velocity aliases.*dynamics"):
+            process.prepare_for_submission(sandbox_folder)
+
+        # In parameters
+        num_atoms = len(si_structure.sites)
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        v_list = [[0.1, 0.0, 0.0]] * num_atoms
+        vel_list = [[0.2, 0.0, 0.0]] * num_atoms
+        params_dict = {"input": {"basis_type": "pw"}, "stru": {"v": v_list, "velocity": vel_list}}
+        inputs.parameters = orm.Dict(params_dict)
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+        with pytest.raises(exceptions.InputValidationError, match=r"Multiple velocity aliases.*parameters"):
+            process.prepare_for_submission(sandbox_folder)
+
+    def test_magmom_multiple_aliases(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+    ):
+        """Test error when multiple magmom aliases in parameters."""
+        from aiida.common import exceptions
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        num_atoms = len(si_structure.sites)
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        stru_dict = {"mag": [[0.0, 0.0, 1.0]] * num_atoms, "magmom": [[0.0, 0.0, -1.0]] * num_atoms}
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": stru_dict})
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+        with pytest.raises(exceptions.InputValidationError, match="Multiple magmom aliases"):
+            process.prepare_for_submission(sandbox_folder)
+
+    def test_velocity_conflict_detection(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+    ):
+        """Test error when velocity specified in both dynamics and parameters."""
+        from aiida.common import exceptions
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        num_atoms = len(si_structure.sites)
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+        inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {"v": [[0.1, 0.0, 0.0]] * num_atoms}})
+        inputs.dynamics = orm.Dict({"v": [[0.2, 0.0, 0.0]] * num_atoms})
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        with pytest.raises(exceptions.InputValidationError, match="specified in both"):
+            process.prepare_for_submission(sandbox_folder)
+
     def test_pseudopotential_file_copying(self, calc_with_inputs, sandbox_folder):
         """Test that pseudopotential files are properly copied to calculation folder."""
         calcinfo = calc_with_inputs.prepare_for_submission(sandbox_folder)
@@ -201,7 +367,25 @@ class TestInputFileGeneration:
         with open(stru_path, "r") as f:
             content = f.read()
 
-        assert "magmom" in content
+        assert "magmom 0.0 0.0 1.0" in content
+
+        parameters = {
+            "input": {"basis_type": "pw", "ecutwfc": 50, "nspin": 2},
+            "stru": {
+                "mag": [[3.0]] * len(si_structure.sites),
+                "m": [[True, True, True]] * len(si_structure.sites),
+            },
+        }
+        inputs.parameters = orm.Dict(parameters)
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        calc = instantiate_process(runner, AbacusCalculation, **inputs)
+        calc.prepare_for_submission(sandbox_folder)
+
+        stru_path = sandbox_folder.get_abs_path("STRU")
+        with open(stru_path, "r") as f:
+            content = f.read()
+        assert "magmom 3.0" in content
 
     def test_restart_folder_handling(self, calc_with_inputs, sandbox_folder):
         """Test handling of restart_folder in calcinfo."""
@@ -317,4 +501,123 @@ class TestInputFileGeneration:
         # The original file should still contain move flags
         with open(stru_path, "r") as f:
             stru_content = f.read()
+        assert "m 1 1 1" in stru_content
+
+    def test_dynamics_port_with_ase_constraints(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that ASE constraints via dynamics port are correctly converted to STRU 'm' flags."""
+        from aiida_abacus.utils import serialize_dynamics
+        from ase import Atoms
+        from ase.constraints import FixAtoms
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Basic parameters WITHOUT 'm' flags
+        parameters = {
+            "input": {
+                "basis_type": "pw",
+                "ecutwfc": 60,
+                "scf_thr": 1e-7,
+                "calculation": "scf",
+            },
+            "stru": {},  # No 'm' here - will come from dynamics
+        }
+        inputs.parameters = orm.Dict(parameters)
+
+        # Create ASE Atoms with constraints - fix first atom
+        positions = [site.position for site in si_structure.sites]
+        symbols = [site.kind_name for site in si_structure.sites]
+        cell = si_structure.cell
+        atoms = Atoms(symbols=symbols, positions=positions, cell=cell)
+        atoms.set_constraint(FixAtoms(indices=[0]))
+
+        # Use dynamics port with ASE Atoms
+        inputs.dynamics = serialize_dynamics(atoms)
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        # Instantiate process
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        # Generate STRU content
+        stru_content, _ = process.generate_structure(si_structure, inputs.pseudos, {})  # Empty stru parameters
+
+        # Verify STRU contains correct 'm' flags
+        # First atom should be "m 0 0 0" (fixed)
+        # Second atom should be "m 1 1 1" (movable)
+        assert "m 0 0 0" in stru_content  # First atom fixed
+        assert "m 1 1 1" in stru_content  # Second atom movable
+
+    def test_dynamics_port_conflicts_with_parameters_raises_error(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that specifying 'm' in both dynamics and parameters raises an error."""
+        from aiida.common.exceptions import InputValidationError
+
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Parameters with 'm' specified
+        num_sites = len(si_structure.sites)
+        parameters = {
+            "input": {"basis_type": "pw", "ecutwfc": 60, "calculation": "scf"},
+            "stru": {"m": [[True, True, True]] * num_sites},
+        }
+        inputs.parameters = orm.Dict(parameters)
+
+        # Dynamics port also has 'm' - this should raise an error
+        inputs.dynamics = orm.Dict({"m": [[False, False, False]] + [[True, True, True]] * (num_sites - 1)})
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        # Should raise InputValidationError when both sources provide 'm'
+        with pytest.raises(InputValidationError, match="both 'dynamics' port and parameters"):
+            process.generate_structure(si_structure, inputs.pseudos, parameters["stru"])
+
+    def test_legacy_parameters_still_works(
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+    ):
+        """Test that legacy parameters['stru']['m'] approach still works (backwards compatibility)."""
+        manager = get_manager()
+        runner = manager.get_runner()
+
+        inputs = AttributeDict()
+        inputs.code = abacus_code
+        inputs.structure = si_structure
+        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.kpoints = abacus_kpoints
+
+        # Legacy approach: specify 'm' in parameters
+        num_sites = len(si_structure.sites)
+        parameters = {
+            "input": {"basis_type": "pw", "ecutwfc": 60, "calculation": "scf"},
+            "stru": {"m": [[False, False, False]] + [[True, True, True]] * (num_sites - 1)},  # First atom fixed
+        }
+        inputs.parameters = orm.Dict(parameters)
+        # NO dynamics port provided
+
+        inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
+
+        process = instantiate_process(runner, AbacusCalculation, **inputs)
+
+        stru_content, _ = process.generate_structure(si_structure, inputs.pseudos, parameters["stru"])
+
+        # First atom should be fixed (from legacy parameters)
+        assert "m 0 0 0" in stru_content
         assert "m 1 1 1" in stru_content

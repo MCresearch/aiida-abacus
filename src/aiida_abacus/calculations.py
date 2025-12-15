@@ -11,6 +11,7 @@ from aiida import orm
 from aiida.common import datastructures, exceptions
 from aiida.common.utils import get_unique_filename
 from aiida.engine import CalcJob
+from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import DataFactory
 from aiida_pseudo.data.pseudo.upf import UpfData
 
@@ -18,6 +19,7 @@ from aiida_abacus.common.opthold import SettingsOptions
 from aiida_abacus.data.orbital import AtomicOrbitalData
 
 from .common import make_retrieve_list
+from .utils import serialize_dynamics
 
 LegacyUpfData = DataFactory("core.upf")
 
@@ -75,11 +77,11 @@ class AbacusCalculation(CalcJob):
         # "input" dict will be written into INPUT file after validation
         # "stru" dict will be queried to write STRU file
         # thus, parameters is likely some Dict() of {"input": {}, "stru": {}}
-        spec.input("parameters", valid_type=orm.Dict, help="The ABACUS input parameters.")
+        spec.input("parameters", serializer=to_aiida_type, valid_type=orm.Dict, help="The ABACUS input parameters.")
 
         # kpoints, which is a KpointsData
         # will be written into KPT file after validation
-        spec.input("kpoints", valid_type=orm.KpointsData, help="The kpoints KPT.")
+        spec.input("kpoints", serializer=to_aiida_type, valid_type=orm.KpointsData, help="The kpoints KPT.")
 
         # structure, which is a StructureData
         # and some other parameters (Dict)
@@ -99,7 +101,21 @@ class AbacusCalculation(CalcJob):
             help=SettingsOptions.aiida_description(),
             required=False,
         )
-        # spec.input("dynamics", valid_type=orm.Dict, help="The dynamics parameters in STRU.")
+
+        # Dynamics port for ASE constraints and selective dynamics
+        spec.input(
+            "dynamics",
+            valid_type=orm.Dict,
+            serializer=serialize_dynamics,
+            help=(
+                "ABACUS parameters related to ionic dynamics. "
+                "Can be set directly from ASE Atoms with constraints: "
+                "builder.dynamics = atoms. Supports FixAtoms and FixCartesian. "
+                "Contains the 'm' key for selective dynamics flags (move/fix atoms), "
+                "and 'v' key for initial velocities (molecular dynamics)."
+            ),
+            required=False,
+        )
         # spec.input("magmom", valid_type=orm.Dict, help="The magnetic moments in STRU.")
 
         # dynamic pseudopotential input port namespace, adapted from aiida-castep
@@ -319,9 +335,12 @@ class AbacusCalculation(CalcJob):
         """Generate the content of input file STRU according to structure.
         For detailed documentation,
         see the ABACUS documentation about the `STRU file <https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html>`_.
+
         :param structure: a StructureData object
         :param pseudos: a dictionary of pseudopotential nodes
-        :param parameters: a dictionary of stru parameters
+        :param parameters: a dictionary of stru parameters. The 'm' key for move flags
+            will be taken from the dynamics input port if provided, otherwise from this
+            parameters dict.
         :return: the content of the input file STRU & a list of pseudopotential files to be copied"""
         # may add some validation here, and maybe some conversions
 
@@ -474,16 +493,104 @@ class AbacusCalculation(CalcJob):
         # that is even though no 'm' KEYWORD is given, this set of params still need to be given
         # KEYWORD m: the atom is allowed to move in geometry relaxation calculations
         # like [[True, True, True]]
-        move_list = parameters.get("m")  # default value for move_x, move_y, move_z
+        # Priority: dynamics port > parameters["m"] > default all movable
+
+        # Check both sources for "m" key
+        dynamics_m = None
+        parameters_m = parameters.get("m")
+
+        if hasattr(self, "inputs") and "dynamics" in self.inputs:
+            dynamics_dict = self.inputs.dynamics.get_dict()
+            dynamics_m = dynamics_dict.get("m")
+
+        # Raise error if both sources provide "m" to avoid ambiguity
+        if dynamics_m is not None and parameters_m is not None:
+            raise exceptions.InputValidationError(
+                "Selective dynamics ('m' flags) specified in both 'dynamics' port and "
+                "parameters['stru']['m']. Please use only one method. "
+                "Recommended: use 'builder.dynamics' with ASE Atoms constraints."
+            )
+
+        # Use priority: dynamics > parameters > default
+        move_list = dynamics_m if dynamics_m is not None else parameters_m
+
+        # Default to all atoms movable if neither provided
         if move_list is None:
-            # Default to move the atoms
             move_list = [[True, True, True]] * len(coordinates)
 
         ### BELOW are optional keywords!!!###
+        # KEYWORD v/vel/velocity: set initial velocities for each atom
+        # Units: atomic units (1 a.u. = 21.877 Angstrom/fs)
+        velocity_list = None
+        dynamics_v = None
+        parameters_v = None
+
+        # Check parameters for velocity aliases - raise error if multiple
+        velocity_aliases = ["v", "vel", "velocity"]
+        params_velocity_keys = [alias for alias in velocity_aliases if parameters.get(alias) is not None]
+        if len(params_velocity_keys) > 1:
+            raise exceptions.InputValidationError(
+                f"Multiple velocity aliases found in parameters['stru']: {params_velocity_keys}. "
+                "Please use only one: 'v', 'vel', or 'velocity'."
+            )
+        if params_velocity_keys:
+            parameters_v = parameters.get(params_velocity_keys[0])
+
+        # Check dynamics port for velocity aliases - raise error if multiple
+        if hasattr(self, "inputs") and "dynamics" in self.inputs:
+            dynamics_dict = self.inputs.dynamics.get_dict()
+            dynamics_velocity_keys = [alias for alias in velocity_aliases if dynamics_dict.get(alias) is not None]
+            if len(dynamics_velocity_keys) > 1:
+                raise exceptions.InputValidationError(
+                    f"Multiple velocity aliases found in dynamics port: {dynamics_velocity_keys}. "
+                    "Please use only one: 'v', 'vel', or 'velocity'."
+                )
+            if dynamics_velocity_keys:
+                dynamics_v = dynamics_dict.get(dynamics_velocity_keys[0])
+
+        # Raise error if both sources provide velocity
+        if dynamics_v is not None and parameters_v is not None:
+            raise exceptions.InputValidationError(
+                "Initial velocities specified in both 'dynamics' port and parameters['stru']. "
+                "Please use only one method. Recommended: use 'builder.dynamics' with Dict."
+            )
+
+        # Use velocity from dynamics or parameters
+        velocity_list = dynamics_v if dynamics_v is not None else parameters_v
+
+        # Validate velocity_list if provided
+        if velocity_list is not None:
+            if len(velocity_list) != len(coordinates):
+                raise exceptions.InputValidationError(
+                    f"Velocity list length ({len(velocity_list)}) does not match "
+                    f"number of atoms ({len(coordinates)})"
+                )
+            # Validate each velocity has 3 components
+            for i, vel in enumerate(velocity_list):
+                if not isinstance(vel, (list, tuple)) or len(vel) != 3:
+                    raise exceptions.InputValidationError(
+                        f"Velocity for atom {i} must be a list/tuple of 3 numbers, got: {vel}"
+                    )
+                # Validate numeric values
+                try:
+                    [float(v) for v in vel]
+                except (TypeError, ValueError) as e:
+                    raise exceptions.InputValidationError(
+                        f"Velocity for atom {i} contains non-numeric values: {vel}"
+                    ) from e
+
         # KEYWORD mag or magmom: set the start magnetization for each atom
         # set three number for the xyz commponent of magnetization here (e.g. mag 0.0 0.0 1.0).
 
-        magmom_list = parameters.get("mag") or parameters.get("magmom", [])  # default value for mag_x, mag_y, mag_z
+        # Check for multiple magmom aliases
+        magmom_aliases = ["mag", "magmom"]
+        magmom_keys = [alias for alias in magmom_aliases if parameters.get(alias) is not None]
+        if len(magmom_keys) > 1:
+            raise exceptions.InputValidationError(
+                f"Multiple magmom aliases found in parameters['stru']: {magmom_keys}. "
+                "Please use only one: 'mag' or 'magmom'."
+            )
+        magmom_list = parameters.get(magmom_keys[0], []) if magmom_keys else []
 
         # Add and count atoms.
         # The following three lines tells the elemental type (Fe),
@@ -496,6 +603,11 @@ class AbacusCalculation(CalcJob):
             # Add the move flags
             flags = map(int, move_list[i])  # Ensure int type
             position.extend(["m", *flags])  # Set the move flag for geometry optimization
+
+            # Add velocity if provided
+            if velocity_list is not None:
+                vel_float = map(float, velocity_list[i])  # Ensure float type
+                position.extend(["v", *vel_float])  # Set initial velocity for molecular dynamics
 
             # each position is a line containing the following information:
             # In colinear case only one number should be given.
