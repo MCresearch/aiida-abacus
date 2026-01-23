@@ -31,6 +31,7 @@ input_parameters = {
     "ks_solver": "dav_subspace",
     "precision": "double",
     "calculation": "cell-relax",
+    "out_stru": "1",
 }
 
 
