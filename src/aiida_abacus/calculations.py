@@ -175,6 +175,13 @@ class AbacusCalculation(CalcJob):
             required=False,
         )
 
+        spec.output(
+            "trajectory",
+            valid_type=TrajectoryData,
+            help="Molecular dynamics trajectory data",
+            required=False,
+        )
+
         spec.exit_code(
             300,
             "ERROR_MISSING_OUTPUT_FILES",
