@@ -252,7 +252,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         natoms = len(structure.sites)
 
-        pseudos, cutoff_wfc, cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
+        pseudos, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
         parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]
@@ -317,8 +317,8 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     :param force_parity: a Bool to specify whether the generated mesh should maintain parity
     :returns: a KpointsData with the generated mesh
     """
-    from aiida.orm import KpointsData
-    from numpy import linalg
+    from aiida.orm import KpointsData  # noqa: PLC0415
+    from numpy import linalg  # noqa: PLC0415
 
     epsilon = 1e-5
 

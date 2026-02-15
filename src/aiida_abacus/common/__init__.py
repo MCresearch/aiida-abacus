@@ -1,3 +1,4 @@
+import collections
 import enum
 import pathlib
 from typing import List, Union
@@ -5,6 +6,7 @@ from typing import List, Union
 import yaml
 from aiida import orm
 from aiida.common import AttributeDict
+from aiida.engine.processes import PortNamespace
 
 DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "device.log", "warning.log", "istate.info", "STRU_ION_D", "STRU_ION*_D")
 
@@ -209,8 +211,6 @@ def recursive_merge(left: dict, right: dict) -> dict:
     :param right: second dictionary
     :return: the recursively merged dictionary
     """
-    import collections
-
     # Note that a deepcopy is not necessary, since this function is called recusively.
     right = right.copy()
 
@@ -288,8 +288,6 @@ def wrap_bare_dict_inputs(port_namespace, inputs):
     :param inputs: a dictionary of inputs intended for submission of the process
     :return: a dictionary with all bare dictionaries wrapped in `Dict` if dictated by the port namespace
     """
-    from aiida.engine.processes import PortNamespace
-
     wrapped = {}
 
     for key, value in inputs.items():

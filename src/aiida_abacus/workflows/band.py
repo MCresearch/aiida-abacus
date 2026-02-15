@@ -191,7 +191,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         else:
             # Using sumo interface
             try:
-                from aiida_abacus.common.sumo_kpath import kpath_from_sumo_v2
+                from aiida_abacus.common.sumo_kpath import kpath_from_sumo_v2  # noqa: PLC0415
             except ImportError:
                 raise ImportError("Sumo is not installed, please install it to use this feature.")
 
@@ -321,7 +321,7 @@ def seekpath_structure_analysis(structure, band_settings):
 
     Note that exact parameters that are available and their defaults will depend on your Seekpath version.
     """
-    from aiida.tools import get_explicit_kpoints_path
+    from aiida.tools import get_explicit_kpoints_path  # noqa: PLC0415
 
     # All keyword arugments should be `Data` node instances of base type and so should have the `.value` attribute
     return get_explicit_kpoints_path(structure, **band_settings.get_dict())

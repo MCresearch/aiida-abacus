@@ -177,7 +177,7 @@ class AbacusCalculation(CalcJob):
 
         spec.output(
             "trajectory",
-            valid_type=TrajectoryData,
+            valid_type=orm.TrajectoryData,
             help="Molecular dynamics trajectory data",
             required=False,
         )
