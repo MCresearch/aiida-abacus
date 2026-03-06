@@ -22,9 +22,9 @@ from yaml import safe_load
 from aiida_abacus.common import recursive_merge
 
 __all__ = [
+    "AbacusBandInputGenerator",
     "AbacusBaseInputGenerator",
     "AbacusRelaxInputGenerator",
-    "AbacusBandInputGenerator",
 ]
 
 

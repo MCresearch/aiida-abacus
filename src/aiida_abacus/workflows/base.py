@@ -252,7 +252,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         natoms = len(structure.sites)
 
-        pseudos, cutoff_wfc, cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
+        pseudos, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
         parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]

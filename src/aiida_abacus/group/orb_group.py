@@ -513,9 +513,9 @@ class OrbitalFamilyImporter:
             Dictionary mapping elements to selected orbital file paths
         """
         with temporary_unzip_folder(orbital_path) as orb_path:
-            with temporary_unzip_folder(pseudo_path) as pseudo_path:
+            with temporary_unzip_folder(pseudo_path) as pseudo_folder:
                 return cls._import_folders(
-                    orb_path, pseudo_path, label, dryrun, stop_if_inconsistent, verbose, variant_choices
+                    orb_path, pseudo_folder, label, dryrun, stop_if_inconsistent, verbose, variant_choices
                 )
 
     @staticmethod
