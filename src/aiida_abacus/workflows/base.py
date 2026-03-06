@@ -317,8 +317,8 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     :param force_parity: a Bool to specify whether the generated mesh should maintain parity
     :returns: a KpointsData with the generated mesh
     """
-    from aiida.orm import KpointsData  # noqa: PLC0415
-    from numpy import linalg  # noqa: PLC0415
+    from aiida.orm import KpointsData
+    from numpy import linalg
 
     epsilon = 1e-5
 
