@@ -40,7 +40,7 @@ pip install .
 ```
 - install using `uv`
 ```bash
-uv sync # use --extra like [--extra pre-commit] to include optional dependencies
+uv sync # use --extra like [--extra dev] to include optional dependencies
 ```
 
 We recommend using `aiida-abacus` with [ABACUS LTS (`v3.10.0`)](https://github.com/deepmodeling/abacus-develop/releases/tag/LTSv3.10.0).
@@ -103,7 +103,7 @@ verdi data abacus export <PK>
 ```shell
 git clone https://github.com/MCresearch/aiida-abacus .
 cd aiida-abacus
-uv sync --group dev-tools
+uv sync --extra dev
 uv run pre-commit install
 uv run pytest -v
 ```
@@ -115,7 +115,7 @@ uv run pytest -v
     - `parsers.py`: The `abacus.abacus` default parser for `AbacusCalculation`.
 - `examples/`: Example of how to submit a calculation using this plugin via a script.
 <!-- See [Features](#features) for details. -->
-- `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install the test toolchain with `uv sync --group testing` and run `uv run pytest`.
+- `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install the test toolchain with `uv sync --extra testing` and run `uv run pytest`.
 
 <!-- See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
 

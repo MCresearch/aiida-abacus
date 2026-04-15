@@ -33,7 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 pre-commit = [
-  'pre-commit~=3.5',
+    "pre-commit~=3.5",
 ]
 docs = [
     "sphinx~=6.2.1",
@@ -55,11 +55,6 @@ tutorial = [
     "aiida-vasp",
     "sumo",
 ]
-dev = [
-    "ruff"
-]
-
-[dependency-groups]
 testing = [
     "pgtest~=1.3,>=1.3.1",
     "coverage~=7.0",
@@ -67,26 +62,13 @@ testing = [
     "pytest-cov~=4.1",
     "ipdb",
 ]
-linting = [
+dev = [
+    "pgtest~=1.3,>=1.3.1",
+    "coverage~=7.0",
+    "pytest~=7.0",
+    "pytest-cov~=4.1",
+    "ipdb",
     "ruff",
-]
-docs-build = [
-    "sphinx~=6.2.1",
-    "sphinxcontrib-contentui",
-    "sphinxemoji",
-    "furo",
-    "markupsafe>=2.1.1",
-    "sphinx-copybutton~=0.5.2",
-    "sphinx-book-theme~=1.0.1",
-    "sphinx-click~=4.4.0",
-    "sphinx-design~=0.6.1",
-    "sphinxcontrib-details-directive~=0.1.0",
-    "sphinx-autoapi~=3.0.0",
-    "myst-parser~=3.0.0",
-]
-dev-tools = [
-    {include-group = "testing"},
-    {include-group = "linting"},
     "pre-commit~=3.5",
 ]
 

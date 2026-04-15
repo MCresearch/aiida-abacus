@@ -2,7 +2,7 @@
 
 Tests can be run in different ways
 ```
-uv sync --group testing
+uv sync --extra testing
 uv run pytest
 uv run pytest tests/test_parser.py -q
 uv run python -m coverage run -m pytest
@@ -18,7 +18,7 @@ We use ipdb as debugger backend for autocompletion.
 
 To check the formatting and linting run
 ```
-uv sync --group linting
+uv sync --extra dev
 uv run ruff format --check .
 uv run ruff check .
 ```
@@ -29,7 +29,7 @@ uv run ruff check --fix .
 ```
 If you want to run this command before each commit, please install the pre-commit hook
 ```
-uv sync --group dev-tools
+uv sync --extra dev
 uv run pre-commit install
 ```
 You can also run the linter and formatter separately
@@ -42,7 +42,7 @@ uv run ruff check .
 
 Please run
 ```
-uv sync --group docs-build
+uv sync --extra docs
 uv run sphinx-build -b html docs/source docs/build/html
 ```
 
