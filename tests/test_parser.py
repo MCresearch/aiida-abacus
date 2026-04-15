@@ -2,6 +2,7 @@ import pathlib
 
 import pytest
 from aiida import orm
+
 from aiida_abacus.parsers.abacus import AbacusParser
 
 

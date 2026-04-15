@@ -13,6 +13,9 @@ from aiida.common import exceptions
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
+from ..common import make_retrieve_list
+from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser, WarningLogParser
+
 
 class ParserError(RuntimeError):
     """Base exception for parser errors."""
@@ -29,8 +32,6 @@ class RequiredQuantityMissingError(ParserError):
 class MissingFileError(ParserError):
     """An expected output file is missing."""
 
-from ..common import make_retrieve_list
-from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser, WarningLogParser
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
 

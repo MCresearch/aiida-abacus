@@ -5,6 +5,7 @@ Unit tests to verify that InputGenerator methods actually update builder content
 from pathlib import Path
 
 import pytest
+
 from aiida_abacus.protocols.generator import AbacusBaseInputGenerator, PresetConfig
 
 

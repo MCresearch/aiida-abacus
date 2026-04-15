@@ -1,7 +1,8 @@
 from aiida import orm
 from aiida.engine import run_get_node
-from aiida_abacus.workflows import AbacusRelaxWorkChain
 from ase.build import bulk
+
+from aiida_abacus.workflows import AbacusRelaxWorkChain
 
 Si2 = bulk("Si", "diamond", 5.4)
 computer = orm.load_computer("localhost")

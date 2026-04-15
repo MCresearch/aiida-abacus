@@ -11,9 +11,11 @@ from aiida.common.exceptions import NotExistent
 from aiida.common.lang import type_check
 from aiida.engine import ProcessHandlerReport, calcfunction, process_handler, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
+from aiida.orm import KpointsData
 from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import GroupFactory
 from aiida_pseudo.groups.family import PseudoPotentialFamily
+from numpy import linalg
 
 from aiida_abacus.calculations import AbacusCalculation
 from aiida_abacus.common import (
@@ -215,7 +217,9 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             )
 
         self.ctx.last_calc_was_unfinished = True
-        self.report_error_handled(calculation, "calculation did not finish cleanly; retrying once with the same inputs.")
+        self.report_error_handled(
+            calculation, "calculation did not finish cleanly; retrying once with the same inputs."
+        )
         return ProcessHandlerReport(True)
 
     @process_handler(priority=800, exit_codes=AbacusCalculation.exit_codes.ERROR_ELECTRONIC_NOT_CONVERGED)
@@ -380,9 +384,6 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     :param force_parity: a Bool to specify whether the generated mesh should maintain parity
     :returns: a KpointsData with the generated mesh
     """
-    from aiida.orm import KpointsData
-    from numpy import linalg
-
     epsilon = 1e-5
 
     kpoints = KpointsData()

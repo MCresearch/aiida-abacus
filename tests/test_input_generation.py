@@ -8,10 +8,17 @@ from pathlib import Path
 
 import pytest
 from aiida import orm
+from aiida.common import exceptions
+from aiida.common.exceptions import InputValidationError
 from aiida.common.extendeddicts import AttributeDict
 from aiida.engine.utils import instantiate_process
 from aiida.manage.manager import get_manager
+from ase import Atoms
+from ase.constraints import FixAtoms
+
 from aiida_abacus.calculations import AbacusCalculation
+from aiida_abacus.parsers.raw_parsers import StruParser
+from aiida_abacus.utils import serialize_dynamics
 
 
 class TestInputFileGeneration:
@@ -168,7 +175,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when velocity list length doesn't match atoms."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -191,7 +197,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when multiple velocity aliases in dynamics port."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -231,7 +236,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when multiple magmom aliases in parameters."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -254,7 +258,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when velocity specified in both dynamics and parameters."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -471,9 +474,6 @@ class TestInputFileGeneration:
             if len(parts) >= 7:
                 assert "m" in parts[3:7]
 
-        # Use the raw STRU parser to read back and parse the STRU file
-        from aiida_abacus.parsers.raw_parsers import StruParser
-
         stru_parser = StruParser(stru_path)
         lattice_vectors, positions, species = stru_parser.parse()
 
@@ -507,10 +507,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints
     ):
         """Test that ASE constraints via dynamics port are correctly converted to STRU 'm' flags."""
-        from aiida_abacus.utils import serialize_dynamics
-        from ase import Atoms
-        from ase.constraints import FixAtoms
-
         manager = get_manager()
         runner = manager.get_runner()
 
@@ -560,8 +556,6 @@ class TestInputFileGeneration:
         self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints
     ):
         """Test that specifying 'm' in both dynamics and parameters raises an error."""
-        from aiida.common.exceptions import InputValidationError
-
         manager = get_manager()
         runner = manager.get_runner()
 

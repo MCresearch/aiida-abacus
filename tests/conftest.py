@@ -1,15 +1,30 @@
 import os
+import shutil
+import zipfile
 from pathlib import Path
 
 import pytest
 from aiida import orm
 from aiida.common.exceptions import NotExistent
 from aiida.common.extendeddicts import AttributeDict
+from aiida.common.folders import SandboxFolder
 from aiida.common.links import LinkType
 from aiida.engine.utils import instantiate_process
 from aiida.manage.manager import get_manager
-from aiida.orm import CalcJobNode
+from aiida.orm import CalcJobNode, load_group
 from aiida.plugins import DataFactory
+from aiida.tools.archive import import_archive
+from aiida_pseudo.data.pseudo import UpfData
+from aiida_pseudo.groups.family import PseudoPotentialFamily
+from ase.build import bulk
+
+from aiida_abacus.calculations import AbacusCalculation
+from aiida_abacus.data.orbital import AtomicOrbitalData
+from aiida_abacus.group.orb_group import (
+    AtomicOrbitalCollection,
+    AtomicOrbitalFamily,
+    parse_orb_filename,
+)
 
 TEST_DIR = os.path.dirname(os.path.realpath(__file__))
 pytest_plugins = "aiida.tools.pytest_fixtures"
@@ -66,7 +81,6 @@ def abacus_params(aiida_profile_clean):
 @pytest.fixture
 def bulk_structure(aiida_profile_clean):
     """Returns a orm.StructureData"""
-    from ase.build import bulk
 
     def inner(*args, **kwargs):
         atoms = bulk(*args, **kwargs)
@@ -100,7 +114,6 @@ def abacus_param(aiida_profile_clean):
 @pytest.fixture
 def abacus_kpoints(aiida_profile_clean):
     """Fixture: kpoints object"""
-    from aiida.plugins import DataFactory
 
     kpoints = DataFactory("core.array.kpoints")()
     kpoints.set_kpoints_mesh([2, 2, 2])
@@ -110,8 +123,6 @@ def abacus_kpoints(aiida_profile_clean):
 @pytest.fixture
 def pseudo_family(aiida_profile_clean, data_folder):
     """Create a Pseudopotential Family"""
-    from aiida_pseudo.data.pseudo import UpfData
-    from aiida_pseudo.groups.family import PseudoPotentialFamily
 
     family = PseudoPotentialFamily.create_from_folder(data_folder / "pseudos", "aiida-abacus-test", pseudo_type=UpfData)
     return family
@@ -123,9 +134,6 @@ def pseudo_family_v2(aiida_profile, data_folder):
     Create a Pseudopotential Family namded apns-efficiency-test
     The group contains pseudopotentials for Si, Mg, O
     """
-    from aiida.orm import load_group
-    from aiida.tools.archive import import_archive
-
     import_archive(data_folder / "pseudos.aiida")
     return load_group("apns-efficiency-test")
 
@@ -166,7 +174,6 @@ def abacus_inputs(aiida_profile_clean, abacus_param, abacus_kpoints, si_structur
 @pytest.fixture()
 def sandbox_folder():
     """Yield a `SandboxFolder` that can be used for tests where a Folder is needed."""
-    from aiida.common.folders import SandboxFolder
 
     with SandboxFolder() as folder:
         yield folder
@@ -175,7 +182,6 @@ def sandbox_folder():
 @pytest.fixture()
 def abacus_calc(aiida_profile_clean, abacus_inputs, abacus_code):
     """An instance of a VaspCalcBase Process."""
-    from aiida_abacus.calculations import AbacusCalculation
 
     manager = get_manager()
     runner = manager.get_runner()
@@ -244,8 +250,6 @@ def si_orbital_file(data_folder):
 @pytest.fixture
 def atomic_orbital_data(aiida_profile_clean, data_folder, si_orbital_file):
     """Create AtomicOrbitalData instance for testing."""
-    from aiida_abacus.data.orbital import AtomicOrbitalData
-    from aiida_abacus.group.orb_group import parse_orb_filename
 
     pseudo_file = data_folder / "pseudos" / "Si.upf"
     orb_node = AtomicOrbitalData(pseudo_file, si_orbital_file)
@@ -261,8 +265,6 @@ def atomic_orbital_data(aiida_profile_clean, data_folder, si_orbital_file):
 @pytest.fixture
 def mg_orbital_data(aiida_profile_clean, data_folder):
     """Create Mg AtomicOrbitalData instance for testing."""
-    from aiida_abacus.data.orbital import AtomicOrbitalData
-    from aiida_abacus.group.orb_group import parse_orb_filename
 
     pseudo_file = data_folder / "pseudos" / "Mg.PD04.PBE.UPF"
     orbital_file = data_folder / "orbitals" / "Mg_gga_9au_100Ry_2s1p.orb"
@@ -279,8 +281,6 @@ def mg_orbital_data(aiida_profile_clean, data_folder):
 @pytest.fixture
 def o_orbital_data(aiida_profile_clean, data_folder):
     """Create O AtomicOrbitalData instance for testing."""
-    from aiida_abacus.data.orbital import AtomicOrbitalData
-    from aiida_abacus.group.orb_group import parse_orb_filename
 
     pseudo_file = data_folder / "pseudos" / "O.upf"
     orbital_file = data_folder / "orbitals" / "O_gga_6au_100Ry_2s2p1d.orb"
@@ -297,7 +297,6 @@ def o_orbital_data(aiida_profile_clean, data_folder):
 @pytest.fixture
 def atomic_orbital_collection(aiida_profile_clean, atomic_orbital_data, mg_orbital_data, o_orbital_data):
     """Create AtomicOrbitalCollection with sample data."""
-    from aiida_abacus.group.orb_group import AtomicOrbitalCollection
 
     # Store the data nodes first
     atomic_orbital_data.store()
@@ -313,7 +312,6 @@ def atomic_orbital_collection(aiida_profile_clean, atomic_orbital_data, mg_orbit
 @pytest.fixture
 def si_orbital_family(aiida_profile_clean, atomic_orbital_data):
     """Create a sample AtomicOrbitalFamily with Si orbital."""
-    from aiida_abacus.group.orb_group import AtomicOrbitalFamily
 
     # Store the data node first
     atomic_orbital_data.store()
@@ -327,7 +325,6 @@ def si_orbital_family(aiida_profile_clean, atomic_orbital_data):
 @pytest.fixture
 def multi_element_family(aiida_profile_clean, atomic_orbital_data, mg_orbital_data):
     """Create AtomicOrbitalFamily with multiple elements."""
-    from aiida_abacus.group.orb_group import AtomicOrbitalFamily
 
     # Store the data nodes first
     atomic_orbital_data.store()
@@ -342,7 +339,6 @@ def multi_element_family(aiida_profile_clean, atomic_orbital_data, mg_orbital_da
 @pytest.fixture
 def structured_orbital_repo(tmp_path, data_folder):
     """Create structured repository layout for import testing."""
-    import shutil
 
     # Create repository structure
     repo_dir = tmp_path / "test_orbital_repo"
@@ -368,8 +364,6 @@ def structured_orbital_repo(tmp_path, data_folder):
 @pytest.fixture
 def sample_orbital_archive(tmp_path, structured_orbital_repo):
     """Create sample ZIP archive for import testing."""
-    import zipfile
-
     archive_path = tmp_path / "test_orbitals.zip"
 
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zipf:

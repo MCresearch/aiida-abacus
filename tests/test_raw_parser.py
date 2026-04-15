@@ -6,6 +6,7 @@ from io import StringIO
 
 import numpy as np
 import pytest
+
 from aiida_abacus.parsers.raw_parsers import (
     AbacusRawParser,
     BandsParser,
@@ -18,11 +19,11 @@ from aiida_abacus.parsers.raw_parsers import (
 
 def test_eigenvalues(data_folder):
     parser = AbacusRawParser(data_folder / "band_Al_pw/running_scf.log")
-    eigen, occ, kpt_cart = parser.parse_eigenvalues()
+    eigen, _occ, kpt_cart = parser.parse_eigenvalues()
     assert eigen.shape == (2, 18, 15)
 
     parser = AbacusRawParser(data_folder / "band_Al_pw/running_nscf.log")
-    eigen, occ, kpt_cart = parser.parse_eigenvalues()
+    eigen, _occ, kpt_cart = parser.parse_eigenvalues()
     assert eigen.shape == (2, 61, 15)
 
     kpt_frac, kpt_cart = parser.parse_kpoints()

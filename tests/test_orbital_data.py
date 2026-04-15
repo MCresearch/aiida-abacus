@@ -2,6 +2,9 @@
 
 import pytest
 from aiida.common.exceptions import ValidationError
+from aiida.common.files import md5_from_filelike
+from aiida_pseudo.data.pseudo import UpfData
+
 from aiida_abacus.data.orbital import AtomicOrbitalData
 
 
@@ -57,8 +60,6 @@ class TestAtomicOrbitalData:
         assert isinstance(atomic_orbital_data.md5_orbital, str)
 
         # Test that md5_orbital matches actual file MD5
-        from aiida.common.files import md5_from_filelike
-
         with atomic_orbital_data.open_second(mode="rb") as handle:
             expected_md5 = md5_from_filelike(handle)
         assert atomic_orbital_data.md5_orbital == expected_md5
@@ -212,8 +213,6 @@ R2    1.0    0.5
 
     def test_inheritance_from_upf_data(self, atomic_orbital_data):
         """Test that AtomicOrbitalData properly inherits from UpfData."""
-        from aiida_pseudo.data.pseudo import UpfData
-
         # Should be an instance of UpfData
         assert isinstance(atomic_orbital_data, UpfData)
 

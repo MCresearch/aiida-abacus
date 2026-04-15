@@ -2,6 +2,7 @@
 Workflow for performing band structure calculation
 """
 
+import importlib
 import pathlib
 
 import numpy as np
@@ -9,12 +10,22 @@ from aiida import orm
 from aiida.common.extendeddicts import AttributeDict
 from aiida.common.lang import type_check
 from aiida.engine import ToContext, WorkChain, calcfunction, if_
+from aiida.tools import get_explicit_kpoints_path
 
 from aiida_abacus.common import ProtocolMixin, RelaxType, prepare_process_inputs
 from aiida_abacus.common.opthold import BandOptions
 
 from .base import AbacusBaseWorkChain
 from .relax import AbacusRelaxWorkChain
+
+
+def _get_sumo_kpath():
+    """Import the optional Sumo k-path helper on demand."""
+    try:
+        module = importlib.import_module("aiida_abacus.common.sumo_kpath")
+    except ImportError as exc:
+        raise ImportError("Sumo is not installed, please install it to use this feature.") from exc
+    return module.kpath_from_sumo_v2
 
 
 class AbacusBandWorkChain(ProtocolMixin, WorkChain):
@@ -191,11 +202,6 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             func = seekpath_structure_analysis
         else:
             # Using sumo interface
-            try:
-                from aiida_abacus.common.sumo_kpath import kpath_from_sumo_v2
-            except ImportError:
-                raise ImportError("Sumo is not installed, please install it to use this feature.")
-
             inputs = {
                 "band_settings": orm.Dict(
                     {
@@ -207,7 +213,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 ),
                 "metadata": {"call_link_label": "sumo_kpath"},
             }
-            func = kpath_from_sumo_v2
+            func = _get_sumo_kpath()
 
         # Run the kpath generation and replace the current structure as the primitive structure
         kpath_results = func(self.ctx.structure, **inputs)
@@ -322,8 +328,6 @@ def seekpath_structure_analysis(structure, band_settings):
 
     Note that exact parameters that are available and their defaults will depend on your Seekpath version.
     """
-    from aiida.tools import get_explicit_kpoints_path
-
     # All keyword arugments should be `Data` node instances of base type and so should have the `.value` attribute
     return get_explicit_kpoints_path(structure, **band_settings.get_dict())
 

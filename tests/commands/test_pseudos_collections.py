@@ -1,6 +1,8 @@
 """Tests for new pseudos CLI commands related to collections."""
 
 import pytest
+from click.testing import CliRunner
+
 from aiida_abacus.commands.pseudos import (
     create_family,
     install_collection,
@@ -8,7 +10,6 @@ from aiida_abacus.commands.pseudos import (
     show_collection,
 )
 from aiida_abacus.group.orb_group import AtomicOrbitalFamily
-from click.testing import CliRunner
 
 
 class TestPseudosCollectionCommands:

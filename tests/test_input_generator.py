@@ -8,6 +8,7 @@ various set methods.
 
 import pytest
 from aiida import orm
+
 from aiida_abacus.protocols.generator import (
     AbacusBandInputGenerator,
     AbacusBaseInputGenerator,

@@ -4,6 +4,7 @@ import pathlib
 
 import pytest
 from aiida.common.exceptions import NotExistent
+
 from aiida_abacus.workflows.base import AbacusBaseWorkChain
 
 

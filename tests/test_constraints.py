@@ -4,9 +4,10 @@ import numpy as np
 import pytest
 from aiida import orm
 from aiida.common.exceptions import InputValidationError
-from aiida_abacus.utils import atoms_to_move_list, serialize_dynamics
 from ase import Atoms
 from ase.constraints import FixAtoms, FixBondLength, FixCartesian, FixScaled
+
+from aiida_abacus.utils import atoms_to_move_list, serialize_dynamics
 
 
 # Fixtures

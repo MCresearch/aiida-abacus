@@ -2,7 +2,10 @@
 
 import pytest
 from aiida.common.exceptions import NotExistent
-from aiida_abacus.group.orb_group import AtomicOrbitalCollection, parse_orb_filename
+from aiida.orm import load_group
+from aiida.plugins import GroupFactory
+
+from aiida_abacus.group.orb_group import AtomicOrbitalCollection, AtomicOrbitalFamily, parse_orb_filename
 
 
 class TestAtomicOrbitalCollection:
@@ -10,8 +13,6 @@ class TestAtomicOrbitalCollection:
 
     def test_constructor_and_inheritance(self, aiida_profile_clean):
         """Test basic construction and inheritance."""
-        from aiida.plugins import GroupFactory
-
         collection = AtomicOrbitalCollection(label="test-collection")
 
         # Should be unstored initially
@@ -73,8 +74,6 @@ class TestAtomicOrbitalCollection:
 
     def test_create_family_from_collection(self, atomic_orbital_collection):
         """Test creating AtomicOrbitalFamily from collection."""
-        from aiida_abacus.group.orb_group import AtomicOrbitalFamily
-
         # Create family with rcut specifications
         family = atomic_orbital_collection.create_family(
             family_label="test-family-from-collection",
@@ -115,8 +114,6 @@ class TestAtomicOrbitalCollection:
         assert atomic_orbital_data in loaded_collection.nodes
 
         # Load by label
-        from aiida.orm import load_group
-
         loaded_by_label = load_group("test-persistent")
         assert loaded_by_label.pk == collection.pk
 

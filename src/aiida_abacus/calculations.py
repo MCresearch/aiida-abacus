@@ -579,8 +579,7 @@ class AbacusCalculation(CalcJob):
         if velocity_list is not None:
             if len(velocity_list) != len(coordinates):
                 raise exceptions.InputValidationError(
-                    f"Velocity list length ({len(velocity_list)}) does not match "
-                    f"number of atoms ({len(coordinates)})"
+                    f"Velocity list length ({len(velocity_list)}) does not match number of atoms ({len(coordinates)})"
                 )
             # Validate each velocity has 3 components
             for i, vel in enumerate(velocity_list):

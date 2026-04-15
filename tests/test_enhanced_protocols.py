@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from aiida import orm
+
 import aiida_abacus.protocols.generator as generator_module
 from aiida_abacus.protocols.generator import (
     AbacusBandInputGenerator,
@@ -64,7 +65,9 @@ def _patch_generator_helpers(monkeypatch, builder):
     monkeypatch.setattr(
         generator_module,
         "recursive_search_dict_with_key",
-        lambda namespace, search_key: [["abacus.parameters", builder.abacus.parameters]] if search_key == "input" else [],
+        lambda namespace, search_key: (
+            [["abacus.parameters", builder.abacus.parameters]] if search_key == "input" else []
+        ),
     )
     monkeypatch.setattr(
         generator_module,

@@ -46,7 +46,9 @@ def test_handler_unfinished_calc_retries_once(aiida_profile_clean, abacus_inputs
     assert workchain.ctx.last_calc_was_unfinished is True
 
 
-def test_handler_unfinished_calc_aborts_on_second_consecutive_failure(aiida_profile_clean, abacus_inputs, abacus_kpoints):
+def test_handler_unfinished_calc_aborts_on_second_consecutive_failure(
+    aiida_profile_clean, abacus_inputs, abacus_kpoints
+):
     workchain = _instantiate_base_workchain(abacus_inputs, abacus_kpoints)
     calculation = _make_failed_calc(301)
 
@@ -94,9 +96,7 @@ def test_handler_ionic_convergence_restarts_from_output_structure(
     assert workchain.ctx.inputs.structure is si_structure
 
 
-def test_handler_ionic_convergence_aborts_without_structure(
-    aiida_profile_clean, abacus_inputs, abacus_kpoints
-):
+def test_handler_ionic_convergence_aborts_without_structure(aiida_profile_clean, abacus_inputs, abacus_kpoints):
     workchain = _instantiate_base_workchain(abacus_inputs, abacus_kpoints)
     calculation = _make_failed_calc(303)
 
