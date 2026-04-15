@@ -2,6 +2,8 @@
 Tests for the parsers
 """
 
+from io import StringIO
+
 import numpy as np
 import pytest
 from aiida_abacus.parsers.raw_parsers import (
@@ -10,6 +12,7 @@ from aiida_abacus.parsers.raw_parsers import (
     InternalParametersParser,
     KpointsParser,
     StruParser,
+    WarningLogParser,
 )
 
 
@@ -29,7 +32,7 @@ def test_eigenvalues(data_folder):
     np.testing.assert_allclose(kpt_frac[0], [0.0, 0.0, 0.0, 0.0082])
     np.testing.assert_allclose(kpt_frac[1], [0.025, -0.025, 0.025, 0.0082])
     assert weights.shape == (122,)
-    assert sum(weights) == pytest.approx(1.0, abs=1e-3)  # Too few number of decimals TODO: raise issue
+    assert sum(weights) == pytest.approx(1.0, abs=1e-3)  # Allow tolerance for floating point precision
 
 
 def test_kpoints_parser(data_folder):
@@ -79,3 +82,114 @@ def test_stru_parser(data_folder):
         ),
     )
     np.testing.assert_allclose(positions[0], [0.0, 0.0, 13.1571816610])
+
+
+def test_parse_notifications():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " #SCF IS CONVERGED#",
+                    " !!SCF IS NOT CONVERGED!!",
+                    " Relaxation is not converged",
+                    " Relaxation is converged!",
+                    " Relaxation is converged, but the SCF is unconverged",
+                ]
+            )
+        )
+    )
+
+    notifications = parser.parse_notifications()
+
+    assert [entry["name"] for entry in notifications] == [
+        "scf_converged",
+        "scf_not_converged",
+        "ionic_not_converged",
+        "ionic_converged",
+        "relax_scf_not_converged",
+    ]
+
+
+def test_parse_notifications_preserves_repeated_order():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " !!SCF IS NOT CONVERGED!!",
+                    " #SCF IS CONVERGED#",
+                    " !!SCF IS NOT CONVERGED!!",
+                ]
+            )
+        )
+    )
+
+    notifications = parser.parse_notifications()
+
+    assert [entry["name"] for entry in notifications] == [
+        "scf_not_converged",
+        "scf_converged",
+        "scf_not_converged",
+    ]
+
+
+def test_parse_notifications_supports_lts_scf_markers():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " charge density convergence is achieved",
+                    " !! convergence has not been achieved @_@",
+                ]
+            )
+        )
+    )
+
+    notifications = parser.parse_notifications()
+
+    assert [entry["name"] for entry in notifications] == [
+        "scf_converged",
+        "scf_not_converged",
+    ]
+
+
+def test_warning_log_parser():
+    parser = WarningLogParser(
+        StringIO(
+            "\n".join(
+                [
+                    " scf  warning : Threshold on eigenvalues was too large.",
+                    " ignored line",
+                    " driver warning : Calculation will restart",
+                ]
+            )
+        )
+    )
+
+    notifications = parser.parse()
+
+    assert notifications == [
+        {"source": "scf", "message": "Threshold on eigenvalues was too large."},
+        {"source": "driver", "message": "Calculation will restart"},
+    ]
+
+
+def test_parse_runtime_warnings():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " random line",
+                    " Notice: Threshold on eigenvalues was too large.",
+                    " Warning: Falling back to a slower path",
+                    " Notice: Threshold on eigenvalues was too large.",
+                ]
+            )
+        )
+    )
+
+    notifications = parser.parse_runtime_warnings()
+
+    assert notifications == [
+        {"source": "running_log", "message": "Threshold on eigenvalues was too large."},
+        {"source": "running_log", "message": "Falling back to a slower path"},
+    ]

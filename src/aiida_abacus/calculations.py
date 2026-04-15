@@ -192,6 +192,16 @@ class AbacusCalculation(CalcJob):
             "ERROR_CALCULATION_INCOMPLETE",
             message="Calculation did not complete successfully - 'Total Time' not found at end of running log.",
         )
+        spec.exit_code(
+            302,
+            "ERROR_ELECTRONIC_NOT_CONVERGED",
+            message="SCF did not reach self-consistency.",
+        )
+        spec.exit_code(
+            303,
+            "ERROR_IONIC_NOT_CONVERGED",
+            message="Ionic relaxation did not converge within the maximum number of steps.",
+        )
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
         spec.default_output_node = "misc"
 

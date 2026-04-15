@@ -5,6 +5,7 @@ Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
 import re
+from pathlib import PurePosixPath
 
 import numpy as np
 from aiida import orm
@@ -12,8 +13,24 @@ from aiida.common import exceptions
 from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
+
+class ParserError(RuntimeError):
+    """Base exception for parser errors."""
+
+
+class QuantityMissingError(ParserError):
+    """A required quantity is missing from the parsed data."""
+
+
+class RequiredQuantityMissingError(ParserError):
+    """A required quantity that must be present is missing."""
+
+
+class MissingFileError(ParserError):
+    """An expected output file is missing."""
+
 from ..common import make_retrieve_list
-from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser
+from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser, WarningLogParser
 
 AbacusCalculation = CalculationFactory("abacus.abacus")
 
@@ -22,6 +39,9 @@ DEFAULT_OUTPUT_SETTINGS = {
     "internal_parameters": False,
     "kpoints": False,
 }
+
+RELAX_RUN_TYPES = {"relax", "cell-relax", "md"}
+SCF_CONVERGENCE_CHECK_RUN_TYPES = {"scf", "relax", "cell-relax"}
 
 
 class AbacusParser(Parser):
@@ -50,10 +70,10 @@ class AbacusParser(Parser):
         """
         output_folder = self.retrieved
         settings = {} if "settings" not in self.node.inputs else self.node.inputs.settings
-        expected_files = make_retrieve_list(self.node.inputs.parameters, settings, AbacusCalculation._OUTPUT_SUFFIX)
-        # Add the STDOUT diversion
-        expected_files.append(AbacusCalculation._ABACUS_OUTPUT)
+        output_suffix = self.node.process_class._OUTPUT_SUFFIX
+        expected_files = make_retrieve_list(self.node.inputs.parameters, settings, output_suffix)
         run_type = self.node.inputs.parameters["input"].get("calculation", "scf")
+        mandatory_files = self._get_mandatory_files(run_type, output_suffix)
 
         # Check if the files are retrieved
         missing = []
@@ -75,10 +95,52 @@ class AbacusParser(Parser):
 
         # Check if calculation completed successfully using run_status from raw parser
         run_status = misc_results.get("run_status", {})
+        notifications = run_status.get("notifications", [])
+
         if not run_status.get("completed", False):
             marker = run_status.get("termination_marker", "unknown")
             self.logger.warning(f"Calculation did not complete successfully. Termination marker: {marker}")
             return self.exit_codes.ERROR_CALCULATION_INCOMPLETE
+
+        if run_type in SCF_CONVERGENCE_CHECK_RUN_TYPES:
+            final_scf_state = self._last_notification_name(notifications, {"scf_converged", "scf_not_converged"})
+            final_ionic_state = self._last_notification_name(
+                notifications, {"ionic_converged", "ionic_not_converged", "geometry_not_converged"}
+            )
+
+            if any(n["name"] == "relax_scf_not_converged" for n in notifications):
+                self.logger.warning("Ionic relaxation converged, but the final SCF did not converge.")
+                return self.exit_codes.ERROR_ELECTRONIC_NOT_CONVERGED
+
+            # Check for electronic convergence failure
+            if final_scf_state == "scf_not_converged":
+                self.logger.warning("SCF did not converge in the final relevant step.")
+                return self.exit_codes.ERROR_ELECTRONIC_NOT_CONVERGED
+
+            # Check for ionic relaxation convergence failure
+            if final_ionic_state in {"ionic_not_converged", "geometry_not_converged"}:
+                self.logger.warning("Ionic relaxation did not converge.")
+                return self.exit_codes.ERROR_IONIC_NOT_CONVERGED
+
+        missing_mandatory = [name for name in mandatory_files if name in missing]
+        if missing_mandatory:
+            self.logger.error(f"The following mandatory output files are missing: {missing_mandatory}")
+            return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
+
+        # Parse warning.log if available
+        folder_name = "OUT." + output_suffix
+        warning_log_path = folder_name + "/warning.log"
+        warning_notifications = []
+        try:
+            with output_folder.open(warning_log_path, "r") as fhandle:
+                warning_parser = WarningLogParser(fhandle)
+                warning_notifications = warning_parser.parse()
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            self.logger.warning(f"Failed to parse warning.log: {exc}")
+
+        misc_results["warnings"] = self._merge_warnings(warning_notifications, raw_parser.parse_runtime_warnings())
 
         misc_node = orm.Dict(dict=misc_results)
 
@@ -135,6 +197,45 @@ class AbacusParser(Parser):
         # Define the output nodes
         self.out("misc", misc_node)
 
+    def _get_mandatory_files(self, run_type: str, output_suffix: str) -> list[str]:
+        """Return files that are required for this parser invocation."""
+        folder_name = f"OUT.{output_suffix}"
+        mandatory = [f"{folder_name}/running_{run_type}.log"]
+
+        if run_type in RELAX_RUN_TYPES:
+            mandatory.append(f"{folder_name}/STRU_ION_D")
+        if self.check_include_node("internal_parameters"):
+            mandatory.append(f"{folder_name}/INPUT")
+        if self.check_include_node("kpoints"):
+            mandatory.append(f"{folder_name}/kpoints")
+
+        return mandatory
+
+    @staticmethod
+    def _merge_warnings(*warning_sets: list[dict]) -> list[dict]:
+        """Merge warning records while preserving input order and removing duplicates."""
+        merged = []
+        seen = set()
+        for warning_set in warning_sets:
+            for warning in warning_set:
+                source = warning.get("source", "")
+                message = warning.get("message", "")
+                key = message
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append({"source": source, "message": message})
+        return merged
+
+    @staticmethod
+    def _last_notification_name(notifications: list[dict], names: set[str]) -> str | None:
+        """Return the last matching notification name from an ordered notification list."""
+        for notification in reversed(notifications):
+            name = notification.get("name")
+            if name in names:
+                return name
+        return None
+
     def check_include_node(self, name: str):
         """
         Check whether to include certain output node
@@ -161,6 +262,7 @@ def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_su
         for file_name in output_folder.list_object_names(folder_name)
         if re.match(r"STRU_ION\d+_D$", file_name)
     ]
+    traj_files.sort(key=lambda name: int(re.search(r"STRU_ION(\d+)_D$", PurePosixPath(name).name).group(1)))
     cell_list = []
     positions_list = []
     symbols_list = []
@@ -179,7 +281,8 @@ def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_su
         traj.base.attributes.set("force_unit", data_dict["force_unit"])
     if data_dict.get("energies"):
         traj.set_array("energies", np.array(data_dict["energies"]))
-    if data_dict.get("all_stresses"):
-        traj.set_array("stresses", np.array(data_dict["stresses"]))
+    all_stress = data_dict.get("all_stress", data_dict.get("all_stresses"))
+    if all_stress:
+        traj.set_array("stresses", np.array(all_stress))
         traj.base.attributes.set("stress_unit", data_dict["stress_unit"])
     return traj

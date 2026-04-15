@@ -22,6 +22,14 @@ def parser_with_retrieved(calc_with_retrieved, request):
     return wrapped
 
 
+def _write_retrieved_tree(base_path: pathlib.Path, calculation: str, log_content: str, warning_content: str = ""):
+    out_folder = base_path / "OUT.aiida"
+    out_folder.mkdir(parents=True, exist_ok=True)
+    (out_folder / f"running_{calculation}.log").write_text(log_content)
+    (out_folder / "warning.log").write_text(warning_content)
+    (base_path / "abacus_output").write_text("")
+
+
 def test_parser_pw_si2(calc_with_retrieved, request):
     """Test parsing pw_Si2 calculation (SCF)"""
     _relative_file_path = "test_data/pw_Si2"
@@ -87,6 +95,8 @@ def test_parser_pw_si2(calc_with_retrieved, request):
     expected_fields = ["total_energy", "number_of_bands"]
     for field in expected_fields:
         assert isinstance(misc[field], (int, float, bool, list))
+
+    assert misc["warnings"] == [{"source": "scf", "message": "Threshold on eigenvalues was too large."}]
 
 
 def test_parser_pw_si2_relax(calc_with_retrieved, request):
@@ -262,6 +272,7 @@ def test_parser_relax_trajectory(parser_with_retrieved):
     # Check that trajectory output node is present
     assert isinstance(parser.outputs.get("trajectory"), orm.TrajectoryData)
     assert len(parser.outputs["trajectory"].get_array("forces")) == len(misc.get("all_forces"))
+    assert len(parser.outputs["trajectory"].get_array("stresses")) == len(misc.get("all_stress"))
     assert parser.outputs.get("trajectory").get_step_structure(1)
 
 
@@ -281,3 +292,225 @@ def test_parser_pw_si2_incomplete(calc_with_retrieved, request):
 
     # When parser exits with error, no outputs are created
     assert "misc" not in parser.outputs
+
+
+def test_parser_returns_electronic_not_converged(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_scf_not_converged"
+    _write_retrieved_tree(
+        file_path,
+        "scf",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " !!SCF IS NOT CONVERGED!!",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path))
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 302
+    assert "misc" not in parser.outputs
+
+
+def test_parser_returns_ionic_not_converged(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_relax_not_converged"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Relaxation is not converged",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 303
+    assert "misc" not in parser.outputs
+
+
+def test_parser_returns_missing_output_files(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_relax_missing_final_structure"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 300
+    assert "misc" not in parser.outputs
+
+
+def test_parser_merges_running_log_warnings(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_warning_merge"
+    _write_retrieved_tree(
+        file_path,
+        "scf",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Notice: Threshold on eigenvalues was too large.",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+        warning_content="driver warning : Calculation will restart\n",
+    )
+
+    node = calc_with_retrieved(str(file_path))
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    assert parser.outputs["misc"].get_dict()["warnings"] == [
+        {"source": "driver", "message": "Calculation will restart"},
+        {"source": "running_log", "message": "Threshold on eigenvalues was too large."},
+    ]
+
+
+def test_parser_returns_geometry_not_converged(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_geometry_not_converged"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Geometry relaxation is not converged",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 303
+
+
+def test_parser_returns_relax_scf_not_converged(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_relax_scf_not_converged"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Relaxation is converged!",
+                " Relaxation is converged, but the SCF is unconverged",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 302
+
+
+def test_parser_allows_relax_with_intermediate_scf_failure_if_final_scf_converges(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_relax_final_scf_converged"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " !!SCF IS NOT CONVERGED!!",
+                " Relaxation is not converged yet!",
+                " #SCF IS CONVERGED#",
+                " Relaxation is converged!",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+    (file_path / "OUT.aiida" / "STRU_ION_D").write_text(
+        "\n".join(
+            [
+                "ATOMIC_SPECIES",
+                "Si 28.0855 Si.upf",
+                "",
+                "NUMERICAL_ORBITAL",
+                "Si.orb",
+                "",
+                "LATTICE_CONSTANT",
+                "1.889726125457828",
+                "",
+                "LATTICE_VECTORS",
+                "5.1 0.0 0.0",
+                "0.0 5.1 0.0",
+                "0.0 0.0 5.1",
+                "",
+                "ATOMIC_POSITIONS",
+                "Cartesian_angstrom",
+                "Si",
+                "0.0",
+                "1",
+                "0.0 0.0 0.0 1 1 1",
+            ]
+        )
+    )
+    (file_path / "OUT.aiida" / "STRU_ION1_D").write_text((file_path / "OUT.aiida" / "STRU_ION_D").read_text())
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    assert "misc" in parser.outputs
+    assert "structure" in parser.outputs
+
+
+def test_parser_does_not_apply_scf_convergence_failure_to_nscf(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_nscf_not_converged_marker"
+    _write_retrieved_tree(
+        file_path,
+        "nscf",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " !! convergence has not been achieved @_@",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "nscf"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    assert "misc" in parser.outputs
