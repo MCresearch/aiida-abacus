@@ -103,10 +103,9 @@ verdi data abacus export <PK>
 ```shell
 git clone https://github.com/MCresearch/aiida-abacus .
 cd aiida-abacus
-pip install --upgrade pip
-pip install -e .[pre-commit,testing]  # install extra dependencies
-pre-commit install  # install pre-commit hooks
-pytest -v  # discover and run all tests
+uv sync --group dev-tools
+uv run pre-commit install
+uv run pytest -v
 ```
 
 ### Repository contents
@@ -116,7 +115,7 @@ pytest -v  # discover and run all tests
     - `parsers.py`: The `abacus.abacus` default parser for `AbacusCalculation`.
 - `examples/`: Example of how to submit a calculation using this plugin via a script.
 <!-- See [Features](#features) for details. -->
-- `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install by `pip install -e .[testing]` and run `pytest`.
+- `tests/`: Basic tests supported by [pytest](https://docs.pytest.org/en/latest/). Install the test toolchain with `uv sync --group testing` and run `uv run pytest`.
 
 <!-- See the [developer guide](http://aiida-abacus.readthedocs.io/en/latest/developer_guide/index.html) for more information. -->
 

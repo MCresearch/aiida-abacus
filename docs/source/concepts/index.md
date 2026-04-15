@@ -39,6 +39,14 @@ aiida-abacus extends AiiDA through its plugin system, providing custom data type
 - [AiiDA Plugin Development](https://aiida.readthedocs.io/projects/aiida-core/en/latest/topics/plugins.html) - How AiiDA plugins work
 - [aiida-abacus Source Code](https://github.com/MCresearch/aiida-abacus) - Plugin implementation
 
+### Protocol-Driven Input Generators
+
+The workflow builders in `aiida-abacus` can be initialized from predefined protocol presets instead of manually wiring every input port. This keeps launch scripts short while still allowing runtime overrides for code, structure, resources, and workflow-specific settings.
+
+**Resources**:
+- [Protocol-driven workflow builders](../howto/workflows.md) - User-facing guide to `AbacusBaseInputGenerator`, `AbacusRelaxInputGenerator`, and `AbacusBandInputGenerator`
+- The implementation lives in `src/aiida_abacus/protocols/generator.py` and the preset YAML files under `src/aiida_abacus/protocols/`
+
 ## Note
 
 Detailed conceptual guides with diagrams and in-depth explanations are under development. For now, please refer to the external resources linked above and the how-to guides for practical information. If you have questions or would like to contribute to expanding this section, please see our [Contributing](../contributing.md) guide.

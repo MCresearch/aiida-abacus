@@ -9,7 +9,7 @@ from aiida import orm
 from aiida.common import AttributeDict, exceptions
 from aiida.common.exceptions import NotExistent
 from aiida.common.lang import type_check
-from aiida.engine import calcfunction, while_
+from aiida.engine import ProcessHandlerReport, calcfunction, process_handler, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
 from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import GroupFactory
@@ -194,10 +194,73 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         # calculation_type = self.ctx.inputs.parameters['input'].get('type', 'scf')
 
         self.ctx.inputs.settings = self.ctx.inputs.settings.get_dict() if "settings" in self.ctx.inputs else {}
+        self.ctx.last_calc_was_unfinished = False
+        self.ctx.electronic_conv_attempts = 0
+        self.ctx.ionic_restart_attempted = False
 
     def prepare_process(self):
         """Prepare the inputs for the next calculation."""
         pass
+
+    @process_handler(priority=900, exit_codes=AbacusCalculation.exit_codes.ERROR_CALCULATION_INCOMPLETE)
+    def handler_unfinished_calc(self, calculation):
+        """Retry one incomplete calculation before aborting."""
+        if self.ctx.last_calc_was_unfinished:
+            self.report_error_handled(
+                calculation, "calculation ended incomplete for the second consecutive time; aborting."
+            )
+            return ProcessHandlerReport(
+                True,
+                self.exit_codes.ERROR_UNRECOVERABLE_FAILURE,
+            )
+
+        self.ctx.last_calc_was_unfinished = True
+        self.report_error_handled(calculation, "calculation did not finish cleanly; retrying once with the same inputs.")
+        return ProcessHandlerReport(True)
+
+    @process_handler(priority=800, exit_codes=AbacusCalculation.exit_codes.ERROR_ELECTRONIC_NOT_CONVERGED)
+    def handler_electronic_convergence(self, calculation):
+        """Adjust SCF settings through a fixed retry sequence."""
+        self.ctx.last_calc_was_unfinished = False
+
+        parameters = self.ctx.inputs.parameters.setdefault("input", {})
+        self.ctx.electronic_conv_attempts += 1
+
+        if parameters.get("scf_nmax", 100) < 150:
+            parameters["scf_nmax"] = 150
+            self.report_error_handled(calculation, "increased `scf_nmax` to 150 and will retry.")
+            return ProcessHandlerReport(True)
+
+        mixing_sequence = [0.4, 0.2, 0.1]
+        current_beta = float(parameters.get("mixing_beta", 0.7))
+
+        for candidate in mixing_sequence:
+            if current_beta > candidate:
+                parameters["mixing_beta"] = candidate
+                self.report_error_handled(calculation, f"reduced `mixing_beta` to {candidate} and will retry.")
+                return ProcessHandlerReport(True)
+
+        self.report_error_handled(calculation, "electronic convergence retries exhausted; aborting.")
+        return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+    @process_handler(priority=700, exit_codes=AbacusCalculation.exit_codes.ERROR_IONIC_NOT_CONVERGED)
+    def handler_ionic_convergence(self, calculation):
+        """Restart ionic calculations from the latest parsed output structure if available."""
+        self.ctx.last_calc_was_unfinished = False
+
+        if self.ctx.ionic_restart_attempted:
+            self.report_error_handled(calculation, "ionic restart already attempted once; aborting.")
+            return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+        try:
+            self.ctx.inputs.structure = calculation.outputs.structure
+        except (AttributeError, KeyError):
+            self.report_error_handled(calculation, "no output structure available for ionic restart; aborting.")
+            return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+        self.ctx.ionic_restart_attempted = True
+        self.report_error_handled(calculation, "restarting from the latest output structure.")
+        return ProcessHandlerReport(True)
 
     @classmethod
     def get_builder_from_protocol(
@@ -368,7 +431,10 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
     try:
         pseudo_family = orm.QueryBuilder().append(AtomicOrbitalFamily, filters={"label": pseudo_family_name}).one()[0]
         pseudos = pseudo_family.get_pseudos(structure=structure)
-        cutoff_wfc = next(iter(pseudos.values())).cut_off_energy  # Use the first pseudo's cut off energy
+        # Safely get cut_off_energy from the first pseudo if available
+        first_pseudo = next(iter(pseudos.values()))
+        if hasattr(first_pseudo, "cut_off_energy") and first_pseudo.cut_off_energy is not None:
+            cutoff_wfc = first_pseudo.cut_off_energy  # Use the first pseudo's cut off energy
     except exceptions.NotExistent:
         pass
     if pseudo_family is not None:

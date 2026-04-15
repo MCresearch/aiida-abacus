@@ -108,7 +108,7 @@ def abacus_kpoints(aiida_profile_clean):
 
 
 @pytest.fixture
-def pseudo_familty(aiida_profile_clean, data_folder):
+def pseudo_family(aiida_profile_clean, data_folder):
     """Create a Pseudopotential Family"""
     from aiida_pseudo.data.pseudo import UpfData
     from aiida_pseudo.groups.family import PseudoPotentialFamily
@@ -131,7 +131,7 @@ def pseudo_family_v2(aiida_profile, data_folder):
 
 
 @pytest.fixture()
-def abacus_inputs(aiida_profile_clean, abacus_param, abacus_kpoints, si_structure, pseudo_familty, abacus_code):
+def abacus_inputs(aiida_profile_clean, abacus_param, abacus_kpoints, si_structure, pseudo_family, abacus_code):
     """Inputs dictionary for CalcJob Processes."""
 
     def inner(settings=None, parameters=None):
@@ -156,7 +156,7 @@ def abacus_inputs(aiida_profile_clean, abacus_param, abacus_kpoints, si_structur
         inputs.parameters = parameters
         inputs.kpoints = abacus_kpoints
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=inputs.structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=inputs.structure)
 
         return inputs
 

@@ -112,7 +112,10 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         )
         builder = cls.get_builder()
         builder.base = base
-        builder.band_settings = inputs.get("band_settings", {})
+        builder.structure = structure
+        builder.band_settings = orm.Dict(dict=inputs.get("band_settings", {}))
+
+        type_check(relax_type, RelaxType)
 
         # Configure relax port if relaxation is requested
         if relax_type != RelaxType.NONE:
@@ -128,8 +131,6 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             builder.relax = relax
 
         return builder
-
-        type_check(relax_type, RelaxType)
 
     def setup(self):
         """Setup the workchain"""
@@ -258,7 +259,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         # Configure the restart folder
         inputs.abacus.restart_folder = self.ctx.restart_folder
         running = {}
-        if self.ctx.band_settings.get("run_band", True):
+        if self.ctx.band_settings.get("run_bands", True):
             # Set the kpoints to be that of the band path
             inputs.kpoints = self.ctx.kpoints_band
             if "kpoints_distance" in inputs:
