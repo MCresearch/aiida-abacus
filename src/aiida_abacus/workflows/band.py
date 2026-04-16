@@ -89,6 +89,10 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
+        spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
+        spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
+        spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
+        spec.exit_code(604, "ERROR_RELAX_PROCESS_FAILED", message="The relaxation calculation failed.")
 
     @classmethod
     def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
@@ -171,7 +175,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
 
     def verify_relax(self):
         """Verify the relax workflow"""
-        if self.ctx.relax_workchain.is_excepted:
+        if not self.ctx.relax_workchain.is_finished_ok:
             return self.exit_codes.ERROR_RELAX_PROCESS_FAILED
         # Set the current structure to the relaxed structure
         self.ctx.structure = self.ctx.relax_workchain.outputs.structure
@@ -194,7 +198,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                     {
                         "reference_distance": self.inputs.band_settings["band_kpoints_distance"],
                         "symprec": self.inputs.band_settings["symprec"],
-                        **self.inputs.band_settings["additional_band_analysis_parameters"],
+                        **self.inputs.band_settings.get("additional_band_analysis_parameters", {}),
                     }
                 ),
                 "metadata": {"call_link_label": "seekpath"},
@@ -208,7 +212,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                         "line_density": self.inputs.band_settings["line_density"],
                         "symprec": self.inputs.band_settings["symprec"],
                         "mode": mode,
-                        **self.inputs.band_settings["additional_band_analysis_parameters"],
+                        **self.inputs.band_settings.get("additional_band_analysis_parameters", {}),
                     }
                 ),
                 "metadata": {"call_link_label": "sumo_kpath"},
@@ -250,7 +254,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         return ToContext(scf_workchain=running)
 
     def verify_scf(self):
-        if self.ctx.scf_workchain.is_excepted:
+        if not self.ctx.scf_workchain.is_finished_ok:
             return self.exit_codes.ERROR_SCF_PROCESS_FAILED
         self.ctx.restart_folder = self.ctx.scf_workchain.outputs.remote_folder
 

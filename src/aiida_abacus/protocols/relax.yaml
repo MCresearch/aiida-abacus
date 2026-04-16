@@ -7,7 +7,6 @@ default_inputs:
         abacus:
             parameters:
                 input:
-                    stress_thr: 0.5
                     cal_stress: true
                     cal_force: true
     base_final_scf:

@@ -90,9 +90,21 @@ class TestProtocolInputGeneration:
             assert hasattr(builder, "kpoints_distance")
             assert builder.abacus.code == abacus_code
             assert builder.abacus.structure == si_structure
+            assert builder.pseudo_family.value == "PseudoDojo/0.4/PBE/SR/standard/upf"
 
         except (NotExistent, ValueError):
             pytest.skip("Pseudopotential family not available")
+
+    def test_get_builder_preserves_overridden_pseudo_family(self, abacus_code, si_structure, pseudo_family_v2):
+        """Test that protocol builders keep the resolved pseudo family on the builder."""
+        builder = AbacusBaseWorkChain.get_builder_from_protocol(
+            code=abacus_code,
+            structure=si_structure,
+            protocol="balanced",
+            overrides={"pseudo_family": "apns-efficiency-test"},
+        )
+
+        assert builder.pseudo_family.value == "apns-efficiency-test"
 
     def test_get_builder_with_options(self, abacus_code, si_structure):
         """Test builder creation with custom options."""

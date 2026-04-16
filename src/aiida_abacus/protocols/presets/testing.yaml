@@ -22,7 +22,7 @@ code_specific:
     settings: {}
     parameters:
       input:
-    pseudo_family: 'apns-efficiency-test'
+        scf_thr: 1e-6
 
 # Default settings for specific workflow types
 default_relax_settings:

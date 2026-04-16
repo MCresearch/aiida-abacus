@@ -334,15 +334,8 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             # Set the initial magnetization
             pass
 
-        # If overrides are provided, they are considered absolute
+        # Apply pseudos overrides on top of the family-resolved pseudos
         if overrides:
-            parameter_overrides = overrides.get("abacus", {}).get("parameters", {})
-            parameters = recursive_merge(parameters, parameter_overrides)
-
-            # # if tot_magnetization in overrides , remove starting_magnetization from parameters
-            # if parameters.get('stru', {}).get('tot_magnetization') is not None:
-            #     parameters.setdefault('stru', {}).pop('starting_magnetization', None)
-
             pseudos_overrides = overrides.get("abacus", {}).get("pseudos", {})
             pseudos = recursive_merge(pseudos, pseudos_overrides)
 
@@ -358,6 +351,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         builder.abacus["structure"] = structure
         builder.abacus["parameters"] = orm.Dict(parameters)
         builder.abacus["metadata"] = metadata
+        builder.pseudo_family = orm.Str(pseudo_family_name)
         if "settings" in inputs["abacus"]:
             builder.abacus["settings"] = orm.Dict(inputs["abacus"]["settings"])
         builder.clean_workdir = orm.Bool(inputs["clean_workdir"])

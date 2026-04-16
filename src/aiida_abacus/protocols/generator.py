@@ -9,8 +9,9 @@ builder, and then mutate the generated inputs through a small convenience API.
 
 from __future__ import annotations
 
+import warnings
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from itertools import chain
 from pathlib import Path
 from typing import Any
@@ -103,10 +104,16 @@ class PresetConfig:
 
         target_path = next((path for path in _iter_preset_candidate_paths(fname) if path.is_file()), None)
         if target_path is None:
-            raise RuntimeError(f"Cannot find preset definition for {fname}")
+            available = [p.stem for p in list_protocol_presets()]
+            raise RuntimeError(f"Cannot find preset definition for '{fname}'. Available presets: {available}")
 
         with open(target_path, encoding="utf-8", mode="r") as fhandle:
             data = safe_load(fhandle) or {}
+
+        valid_fields = {f.name for f in fields(cls)}
+        unknown = set(data) - valid_fields
+        if unknown:
+            raise ValueError(f"Unknown keys in preset '{fname}': {unknown}. Valid keys: {sorted(valid_fields)}")
 
         return cls(**data)
 
@@ -206,8 +213,15 @@ class BaseInputGenerator:
         """Store the builder and apply preset/profile defaults consistently."""
 
         self.builder = builder
-        BaseInputGenerator.set_settings(self, profile_config["settings"])
-        BaseInputGenerator.set_parameters(self, profile_config["parameters"])
+        self.set_settings(profile_config["settings"])
+        # Merge code-specific parameters into the ``input`` sub-dict of each parameter port.
+        # Only the ``input`` namespace is extracted; other ABACUS parameter namespaces
+        # (e.g. ``stru``) are not set via presets and should be configured directly.
+        params_from_preset = profile_config.get("parameters", {})
+        if params_from_preset:
+            input_updates = params_from_preset.get("input", {})
+            if input_updates:
+                self.set_input(input_updates)
         return builder
 
     def build(self, structure, code=None, protocol=None, overrides=None, **kwargs):
@@ -315,28 +329,6 @@ class BaseInputGenerator:
         cloned.builder = deepcopy(self.builder)
         return cloned
 
-    def set_parameters(self, parameter_updates=None, update_all=True, ports=None, namespace="input", **kwargs):
-        """Update ABACUS parameter dictionaries."""
-
-        if parameter_updates is None and not kwargs:
-            return self
-
-        self._require_builder()
-
-        if update_all:
-            ports_nodes = recursive_search_dict_with_key(self.builder, namespace)
-        else:
-            ports = ports or ["parameters"]
-            ports_nodes = [[port, self._get_port_node(port)] for port in ports]
-
-        updates = deepcopy(parameter_updates or {})
-        updates.update(kwargs)
-
-        for port, node in ports_nodes:
-            self._update_dict_node(port, updates, dict_node=node, namespace=namespace)
-
-        return self
-
     def set_input(self, input_updates=None, update_all=True, ports=None, **kwargs):
         """Update the ``input`` namespace inside parameter dictionaries."""
 
@@ -376,9 +368,11 @@ class BaseInputGenerator:
             ports = ports or ["abacus"]
             calc_namespaces = [[port, self._get_port_node(port)] for port in ports]
 
-        for _port, namespace in calc_namespaces:
+        for port, namespace in calc_namespaces:
             if has_content(namespace) or namespace._port_namespace._required:
                 namespace["metadata"]["options"] = recursive_merge(dict(namespace["metadata"]["options"]), updates)
+            elif self.verbose:
+                warnings.warn(f"set_options: skipping optional namespace '{port}' with no content.", stacklevel=2)
 
         return self
 
@@ -401,9 +395,13 @@ class BaseInputGenerator:
             ports = ports or ["abacus"]
             calc_namespaces = [[port, self._get_port_node(port)] for port in ports]
 
-        for _port, namespace in calc_namespaces:
+        for port, namespace in calc_namespaces:
             if has_content(namespace) or namespace._port_namespace._required:
-                namespace["metadata"]["options"]["resources"].update(updates)
+                options = namespace["metadata"]["options"]
+                options.setdefault("resources", {})
+                options["resources"] = recursive_merge(options["resources"], updates)
+            elif self.verbose:
+                warnings.warn(f"set_resources: skipping optional namespace '{port}' with no content.", stacklevel=2)
 
         return self
 
@@ -499,11 +497,17 @@ class BaseInputGenerator:
 
         self._require_builder()
 
-        if self.reference_structure:
-            kpoints = orm.KpointsData()
-            kpoints.set_cell_from_structure(self.reference_structure)
-            kpoints.set_kpoints_mesh(mesh, list(offset))
-            self._update_ports_by_base_name(kpoints, "kpoints", ports=ports, update_all=update_all)
+        structure = self.reference_structure
+        if structure is None:
+            warnings.warn(
+                "set_kpoints_mesh: no reference structure found on the builder; k-points were not set.", stacklevel=2
+            )
+            return self
+
+        kpoints = orm.KpointsData()
+        kpoints.set_cell_from_structure(structure)
+        kpoints.set_kpoints_mesh(mesh, list(offset))
+        self._update_ports_by_base_name(kpoints, "kpoints", ports=ports, update_all=update_all)
 
         return self
 
@@ -561,16 +565,19 @@ class BaseInputGenerator:
 
 
 def update_dict_node(
-    node: orm.Dict,
+    node: orm.Dict | None,
     content: dict[str, Any],
     namespace: str | None = None,
     reuse_if_possible: bool = True,
 ) -> orm.Dict:
-    """Update an ``orm.Dict`` node with merged content."""
+    """Update an ``orm.Dict`` node with merged content.  If *node* is ``None``, a fresh ``orm.Dict`` is created."""
 
-    dtmp = node.get_dict()
+    if node is None:
+        dtmp = {namespace: {}} if namespace else {}
+    else:
+        dtmp = node.get_dict()
     dtmp_backup = None
-    if reuse_if_possible and node.is_stored:
+    if node is not None and reuse_if_possible and node.is_stored:
         dtmp_backup = deepcopy(dtmp)
 
     left = dtmp.get(namespace, {}) if namespace else dtmp
@@ -580,6 +587,9 @@ def update_dict_node(
         dtmp[namespace] = left
     else:
         dtmp = left
+
+    if node is None:
+        return orm.Dict(dict=dtmp)
 
     if node.is_stored:
         if reuse_if_possible and dtmp == dtmp_backup:
@@ -663,14 +673,6 @@ class CalculationNamespaceGenerator:
     def _port(self, leaf: str) -> str:
         return join_namespace_path(self.namespace_path, leaf)
 
-    def set_parameters(self, parameter_updates=None, namespace="input", **kwargs):
-        """Update the calculation ``parameters`` port."""
-
-        self.root.set_parameters(
-            parameter_updates, ports=[self._port("parameters")], update_all=False, namespace=namespace, **kwargs
-        )
-        return self
-
     def set_input(self, input_updates=None, **kwargs):
         """Update ``parameters.input`` for this calculation branch."""
 
@@ -737,12 +739,6 @@ class WorkflowNamespaceGenerator:
         """Return the underlying ABACUS calculation namespace for this workflow branch."""
 
         return CalculationNamespaceGenerator(self.root, self._calculation_namespace_path())
-
-    def set_parameters(self, parameter_updates=None, namespace="input", **kwargs):
-        """Update calculation parameters on the child ABACUS namespace."""
-
-        self.abacus().set_parameters(parameter_updates, namespace=namespace, **kwargs)
-        return self
 
     def set_input(self, input_updates=None, **kwargs):
         """Update ``parameters.input`` on the child ABACUS namespace."""
