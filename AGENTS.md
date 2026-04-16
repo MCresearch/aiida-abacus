@@ -19,6 +19,7 @@ Target Python 3.10+ and follow the Ruff configuration in `pyproject.toml`: 120-c
 
 ## Testing Guidelines
 Pytest is the test runner. The repository is configured to discover `test_*.py` and `example_*.py`. Add focused unit tests beside the nearest existing suite, for example parser changes in `tests/test_parser.py` or workflow changes in `tests/test_builder_updates.py`. Prefer small fixtures from `tests/test_data/`. Run a targeted test first, then the broader suite before opening a PR.
+When running scripts outside of pytest that interact with AiiDA (e.g. example scripts, manual test scripts), always set `AIIDA_PATH=.` to use the local AiiDA profile instead of the production one.
 
 ## Commit & Pull Request Guidelines
 Recent history favors short, imperative commit subjects such as `Remove noqa` or `Fix all 10 linter errors identified by ruff`, with occasional scoped conventional prefixes like `fix(calculation): ...`. Keep subjects concise, describe behavior changes in the body when needed, and reference issue or PR numbers when relevant. PRs should explain the user-visible change, note test coverage, and mention documentation updates when protocols, CLI behavior, or examples change.
