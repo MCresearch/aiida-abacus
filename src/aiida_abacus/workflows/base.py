@@ -180,12 +180,15 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(AbacusCalculation, "abacus"))
 
         self.ctx.inputs.parameters = self.ctx.inputs.parameters.get_dict()
+        if "pseudo_family" in self.inputs and "pseudos" in self.ctx.inputs and self.ctx.inputs.pseudos:
+            self.report("Specify either `pseudo_family` or `abacus.pseudos`, but not both.")
+            return self.exit_codes.ERROR_INVALID_INPUT_PSEUDO_POTENTIALS
+
         if "pseudo_family" in self.inputs:
             # NOTE: cutoff_rho is not used here
-            pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
+            self.ctx.inputs.pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
                 self.inputs.abacus.structure, self.inputs.pseudo_family.value
             )
-            self.ctx.inputs.pseudos = pseudos
             # Set the default ecutwfc if not specified
             if self.ctx.inputs.parameters["input"].get("ecutwfc", None) is None:
                 self.ctx.inputs.parameters["input"]["ecutwfc"] = cutoff_wfc
@@ -252,7 +255,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         natoms = len(structure.sites)
 
-        pseudos, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
+        _, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
         parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]
@@ -267,6 +270,10 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             # Set the initial magnetization
             pass
 
+        pseudos = overrides.get("abacus", {}).get("pseudos", {}) if overrides else {}
+        if pseudos:
+            raise ValueError("Specify either `pseudo_family` or `overrides['abacus']['pseudos']`, but not both.")
+
         # If overrides are provided, they are considered absolute
         if overrides:
             parameter_overrides = overrides.get("abacus", {}).get("parameters", {})
@@ -276,9 +283,6 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             # if parameters.get('stru', {}).get('tot_magnetization') is not None:
             #     parameters.setdefault('stru', {}).pop('starting_magnetization', None)
 
-            pseudos_overrides = overrides.get("abacus", {}).get("pseudos", {})
-            pseudos = recursive_merge(pseudos, pseudos_overrides)
-
         metadata = inputs["abacus"]["metadata"]
 
         if options:
@@ -287,12 +291,14 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         # pylint: disable=no-member
         builder = cls.get_builder()
         builder.abacus["code"] = code
-        builder.abacus["pseudos"] = pseudos
+        if pseudos:
+            builder.abacus["pseudos"] = pseudos
         builder.abacus["structure"] = structure
         builder.abacus["parameters"] = orm.Dict(parameters)
         builder.abacus["metadata"] = metadata
         if "settings" in inputs["abacus"]:
             builder.abacus["settings"] = orm.Dict(inputs["abacus"]["settings"])
+        builder.pseudo_family = orm.Str(pseudo_family_name)
         builder.clean_workdir = orm.Bool(inputs["clean_workdir"])
         if "kpoints" in inputs:
             builder.kpoints = inputs["kpoints"]
