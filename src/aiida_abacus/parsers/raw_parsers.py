@@ -383,7 +383,7 @@ class StruParser(BaseRawParser):
             for i in range(int(current_natoms)):
                 tokens = pos_block[p + 3 + i].split()
                 positions.append([float(value) for value in tokens[:3]])
-                species.append(current_specie)
+                species.append(re.match(r"^([A-Za-z]+)", current_specie).group(1))
             p += 3 + int(current_natoms)
         positions = np.array(positions)
         # Lattice vectors in angstrom
