@@ -109,9 +109,9 @@ class AbacusParser(Parser):
                 node.append_atom(position=pos, symbols=symbol)
             self.out("structure", node)
             # Compose trajectory node
-            self.out(
-                "trajectory", compose_trajectory(output_folder, misc_results, self.node.process_class._OUTPUT_SUFFIX)
-            )
+            trajectory = self._compose_trajectory(output_folder, misc_results)
+            if trajectory:
+                self.out("trajectory", trajectory)
 
         # Parse the calculation raw parameters
         if self.check_include_node("internal_parameters"):
@@ -144,42 +144,49 @@ class AbacusParser(Parser):
             return DEFAULT_OUTPUT_SETTINGS[name]
         return self.node.inputs.settings.get("include_" + name, DEFAULT_OUTPUT_SETTINGS[name])
 
+    def _compose_trajectory(self, output_folder: orm.FolderData, data_dict: dict):
+        """
+        Compose a TrajectoryData node based on the retrieved data
 
-def compose_trajectory(output_folder: orm.FolderData, data_dict: dict, output_suffix=AbacusCalculation._OUTPUT_SUFFIX):
-    """
-    Compose a TrajectoryData node based on the retrieved data
-
-    :param output_folder: A FolderData containing the retrieved files
-    :param data_dict: The `results` dictionary retrieved
-    :param output_suffix: The *suffix* used by AbacusCalculation
-
-    :return: A orm.TrajectoryData Node.
-    """
-    folder_name = "OUT." + output_suffix
-    traj_files = [
-        file_name
-        for file_name in output_folder.list_object_names(folder_name)
-        if re.match(r"STRU_ION\d+_D$", file_name)
-    ]
-    cell_list = []
-    positions_list = []
-    symbols_list = []
-    for traj_file in traj_files:
-        with output_folder.open(folder_name + "/" + traj_file) as fhandle:
-            parser = StruParser(fhandle)
-            cell, positions, species = parser.parse_structure()
-        cell_list.append(cell)
-        positions_list.append(positions)
-        symbols_list.append(species)
-    traj = orm.TrajectoryData()
-    traj.set_trajectory(symbols=symbols_list[0], cells=np.array(cell_list), positions=np.array(positions_list))
-    # Set additional data
-    if data_dict.get("all_forces"):
-        traj.set_array("forces", np.array(data_dict["all_forces"]))
-        traj.base.attributes.set("force_unit", data_dict["force_unit"])
-    if data_dict.get("energies"):
-        traj.set_array("energies", np.array(data_dict["energies"]))
-    if data_dict.get("all_stresses"):
-        traj.set_array("stresses", np.array(data_dict["stresses"]))
-        traj.base.attributes.set("stress_unit", data_dict["stress_unit"])
-    return traj
+        :param output_folder: A FolderData containing the retrieved files
+        :param data_dict: The `results` dictionary retrieved
+        :return: A orm.TrajectoryData Node or None.
+        """
+        output_suffix = self.node.process_class._OUTPUT_SUFFIX
+        folder_name = "OUT." + output_suffix
+        traj_files = [
+            file_name
+            for file_name in output_folder.list_object_names(folder_name)
+            if re.match(r"STRU_ION(\d+)_D$", file_name)
+        ]
+        if not traj_files:
+            self.logger.warning("Skipping trajectory node creation: No intermediate STRU_ION*_D files found.")
+            # Check out_stru parameter
+            if "parameters" in self.node.inputs:
+                out_stru = self.node.inputs.parameters["input"].get("out_stru", "0")
+                if str(out_stru).lower() in ["0", False]:
+                    self.logger.warning("Please set 'out_stru = 1' in INPUT to enable trajectory output.")
+            return None
+        traj_files.sort(key=lambda f: int(re.search(r"STRU_ION(\d+)_D$", f).group(1)))
+        cell_list = []
+        positions_list = []
+        symbols_list = []
+        for traj_file in traj_files:
+            with output_folder.open(folder_name + "/" + traj_file) as fhandle:
+                parser = StruParser(fhandle)
+                cell, positions, species = parser.parse_structure()
+            cell_list.append(cell)
+            positions_list.append(positions)
+            symbols_list.append(species)
+        traj = orm.TrajectoryData()
+        traj.set_trajectory(symbols=symbols_list[0], cells=np.array(cell_list), positions=np.array(positions_list))
+        # Set additional data
+        if data_dict.get("all_forces"):
+            traj.set_array("forces", np.array(data_dict["all_forces"]))
+            traj.base.attributes.set("force_unit", data_dict["force_unit"])
+        if data_dict.get("energies"):
+            traj.set_array("energies", np.array(data_dict["energies"]))
+        if data_dict.get("all_stresses"):
+            traj.set_array("stresses", np.array(data_dict["stresses"]))
+            traj.base.attributes.set("stress_unit", data_dict["stress_unit"])
+        return traj
