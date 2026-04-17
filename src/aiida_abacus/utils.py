@@ -85,7 +85,8 @@ def atoms_to_move_list(atoms: Atoms) -> np.ndarray | None:
             mask = constraint.mask  # ASE convention: True = fixed
 
             # Invert mask: where ASE mask is True (fixed), set ABACUS move flag to False (fixed)
-            move_list[indices, mask] = False
+            fixed_directions = np.where(mask)[0]
+            move_list[np.ix_(indices, fixed_directions)] = False
 
         else:
             # Unsupported constraint type
