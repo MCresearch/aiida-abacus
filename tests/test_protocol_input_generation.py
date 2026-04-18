@@ -3,7 +3,11 @@
 import pathlib
 
 import pytest
+from aiida import orm
+from aiida.common import AttributeDict
 from aiida.common.exceptions import NotExistent
+from aiida.engine.utils import instantiate_process
+from aiida.manage.manager import get_manager
 
 from aiida_abacus.workflows.base import AbacusBaseWorkChain
 
@@ -130,3 +134,72 @@ class TestProtocolInputGeneration:
         assert inputs["abacus"]["parameters"]["input"]["new_parameter"] == "test"
         assert inputs["abacus"]["parameters"]["input"]["ecutwfc"] == 80
         assert "basis_type" in inputs["abacus"]["parameters"]["input"]
+
+    def test_get_builder_preserves_parameter_overrides(self, abacus_code, si_structure, pseudo_family_v2):
+        """Explicit parameter overrides should win over derived defaults."""
+        overrides = {
+            "pseudo_family": "apns-efficiency-test",
+            "abacus": {"parameters": {"input": {"ecutwfc": 123, "scf_thr": 4.2e-9}}},
+        }
+
+        builder = AbacusBaseWorkChain.get_builder_from_protocol(
+            code=abacus_code,
+            structure=si_structure,
+            protocol="balanced",
+            overrides=overrides,
+        )
+
+        parameters = builder.abacus.parameters.get_dict()["input"]
+        assert parameters["ecutwfc"] == 123
+        assert parameters["scf_thr"] == 4.2e-9
+        assert builder.pseudo_family.value == "apns-efficiency-test"
+        assert not dict(builder.abacus.pseudos)
+
+    def test_get_builder_rejects_explicit_pseudos_with_pseudo_family(
+        self, abacus_code, si_structure, pseudo_family_v2, pseudo_family
+    ):
+        """Protocol builders should reject simultaneous family and explicit pseudo inputs."""
+        explicit_pseudo = pseudo_family.get_pseudos(structure=si_structure)["Si"]
+        overrides = {
+            "pseudo_family": "apns-efficiency-test",
+            "abacus": {"pseudos": {"Si": explicit_pseudo}},
+        }
+
+        with pytest.raises(
+            ValueError, match="Specify either `pseudo_family` or `overrides\\['abacus'\\]\\['pseudos'\\]`"
+        ):
+            AbacusBaseWorkChain.get_builder_from_protocol(
+                code=abacus_code,
+                structure=si_structure,
+                protocol="balanced",
+                overrides=overrides,
+                options={"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}},
+            )
+
+    def test_setup_rejects_pseudo_family_with_explicit_pseudos(
+        self, abacus_code, si_structure, pseudo_family_v2, pseudo_family
+    ):
+        """Manual inputs that specify both pseudo sources should fail clearly at runtime."""
+        runner = get_manager().get_runner()
+        explicit_pseudos = pseudo_family.get_pseudos(structure=si_structure)
+        process = instantiate_process(
+            runner,
+            AbacusBaseWorkChain,
+            abacus=AttributeDict(
+                {
+                    "code": abacus_code,
+                    "structure": si_structure,
+                    "pseudos": explicit_pseudos,
+                    "parameters": orm.Dict({"input": {"ecutwfc": 60, "scf_thr": 1e-7}}),
+                    "metadata": {"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}},
+                }
+            ),
+            pseudo_family=orm.Str("apns-efficiency-test"),
+            kpoints_distance=orm.Float(0.1),
+            kpoints_force_parity=orm.Bool(False),
+            clean_workdir=orm.Bool(False),
+            max_iterations=orm.Int(1),
+        )
+
+        result = process.setup()
+        assert result == process.exit_codes.ERROR_INVALID_INPUT_PSEUDO_POTENTIALS
