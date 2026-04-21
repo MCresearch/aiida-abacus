@@ -135,6 +135,42 @@ class AbacusParser(Parser):
         # Define the output nodes
         self.out("misc", misc_node)
 
+        # Check convergence status and return appropriate exit code (after all parsing is done)
+        return self._check_convergence(run_status, run_type)
+
+    def _check_convergence(self, run_status, run_type):
+        """
+        Check convergence status based on run_type.
+
+        :param run_status: The run_status dictionary from parsing
+        :param run_type: The calculation type (scf, relax, cell-relax, md)
+        :return: An exit code if there are issues, None if converged or not applicable
+        """
+        scf_converged = run_status.get("scf_converged")
+        opt_converged = run_status.get("opt_converged")
+
+        # SCF calculation
+        if run_type == "scf":
+            if not scf_converged:
+                self.logger.error("SCF calculation did not converge")
+                return self.exit_codes.ERROR_SCF_NOT_CONVERGED
+            return None
+
+        # Relax/MD calculation
+        elif run_type in ["relax", "cell-relax", "md"]:
+            # Ionic converged but final SCF failed
+            if opt_converged and not scf_converged:
+                self.logger.error("Ionic minimization converged but final SCF did not converge")
+                return self.exit_codes.ERROR_IONIC_CONVERGED_BUT_SCF_FAILED
+
+            # Ionic not converged
+            if not opt_converged:
+                self.logger.error("Ionic minimization did not converge")
+                return self.exit_codes.ERROR_IONIC_NOT_CONVERGED
+            return None
+
+        return None
+
     def check_include_node(self, name: str):
         """
         Check whether to include certain output node

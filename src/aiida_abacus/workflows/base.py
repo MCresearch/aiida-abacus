@@ -9,8 +9,9 @@ from aiida import orm
 from aiida.common import AttributeDict, exceptions
 from aiida.common.exceptions import NotExistent
 from aiida.common.lang import type_check
-from aiida.engine import calcfunction, while_
+from aiida.engine import calcfunction, process_handler, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
+from aiida.engine.processes.workchains.utils import ProcessHandlerReport
 from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import GroupFactory
 from aiida_pseudo.groups.family import PseudoPotentialFamily
@@ -131,6 +132,11 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             message="The electronic minimization cycle did not reach self-consistency, but `scf_must_converge` "
             "is `False` and/or `electron_maxstep` is 0.",
         )
+        spec.exit_code(
+            500,
+            "ERROR_SUBPROCESS_FAILED",
+            message="Subprocess failed due to convergence issues.",
+        )
 
     def validate_kpoints(self):
         """Validate the inputs related to k-points.
@@ -166,6 +172,28 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         arguments = [calculation.process_label, calculation.pk, calculation.exit_status, calculation.exit_message]
         self.report("{}<{}> failed with exit status {}: {}".format(*arguments))
         self.report(f"Action taken: {action}")
+
+    @process_handler(priority=500)
+    def handle_convergence_errors(self, calculation):
+        """Handle convergence-related errors from subprocess calculation."""
+        exit_status = calculation.exit_status
+
+        # Get exit codes from the subprocess calculation
+        calc_exit_codes = calculation.process_class.exit_codes
+
+        if exit_status == calc_exit_codes.ERROR_SCF_NOT_CONVERGED.status:
+            self.report_error_handled(calculation, "SCF calculation did not converge")
+            return ProcessHandlerReport(do_break=True, exit_code=self.exit_codes.ERROR_SUBPROCESS_FAILED)
+
+        if exit_status == calc_exit_codes.ERROR_IONIC_NOT_CONVERGED.status:
+            self.report_error_handled(calculation, "Ionic minimization did not converge")
+            return ProcessHandlerReport(do_break=True, exit_code=self.exit_codes.ERROR_SUBPROCESS_FAILED)
+
+        if exit_status == calc_exit_codes.ERROR_IONIC_CONVERGED_BUT_SCF_FAILED.status:
+            self.report_error_handled(calculation, "Ionic minimization converged but final SCF failed")
+            return ProcessHandlerReport(do_break=True, exit_code=self.exit_codes.ERROR_SUBPROCESS_FAILED)
+
+        return None
 
     def setup(self):
         """Call the ``setup`` of the ``BaseRestartWorkChain`` and create the inputs dictionary in ``self.ctx.inputs``.

@@ -182,24 +182,22 @@ class AbacusRawParser(BaseRawParser):
 
         :returns: Dictionary with completion status, SCF convergence, and OPT convergence
         """
-        # Initialize run status
         run_status = {
-            "completed": False, 
-            "completion_marker_found": False, 
+            "completed": False,
+            "completion_marker_found": False,
             "termination_marker": None,
-            "scf_converged": "unknown",
-            "opt_converged": "unknown"
+            "scf_converged": None,
+            "opt_converged": None,
         }
 
         try:
-            # Check if we have any lines to analyze
             if not self.lines:
                 logger.warning("Empty file content provided for status check")
-                run_status["scf_converged"] = "error"
-                run_status["opt_converged"] = "error"
+                run_status["scf_converged"] = False
+                run_status["opt_converged"] = False
+                run_status["termination_marker"] = "empty file"
                 return run_status
 
-            # Scan from the end of the log file
             scf_done = False
             opt_done = False
             completion_found = False
@@ -217,43 +215,41 @@ class AbacusRawParser(BaseRawParser):
 
                 # Check OPT/ionic convergence status
                 if not opt_done:
-                    if 'Relaxation is converged!' in line or 'ionic relaxation is converged' in line:
-                        run_status["opt_converged"] = "converged"
+                    if "Relaxation is converged!" in line or "ionic relaxation is converged" in line:
+                        run_status["opt_converged"] = True
                         opt_done = True
                         logger.debug(f"OPT converged found in: {line_stripped}")
-                    elif ('not converged' in line.lower() and 'ionic' in line.lower()) or \
-                         'Lattice relaxation is not converged yet!' in line:
-                        run_status["opt_converged"] = "not_converged"
+                    elif (
+                        "not converged" in line.lower() and "ionic" in line.lower()
+                    ) or "Lattice relaxation is not converged yet" in line:
+                        run_status["opt_converged"] = False
                         opt_done = True
                         logger.debug(f"OPT not converged found in: {line_stripped}")
 
                 # Check SCF/electronic convergence status
                 if not scf_done:
-                    if 'charge density convergence is achieved' in line or '#SCF IS CONVERGED#' in line:
-                        run_status["scf_converged"] = "converged"
+                    if "charge density convergence is achieved" in line or "#SCF IS CONVERGED#" in line:
+                        run_status["scf_converged"] = True
                         scf_done = True
                         logger.debug(f"SCF converged found in: {line_stripped}")
-                    elif 'convergence has not been achieved' in line or 'SCF IS NOT CONVERGED' in line:
-                        run_status["scf_converged"] = "not_converged"
+                    elif "convergence has not been achieved" in line or "SCF IS NOT CONVERGED" in line:
+                        run_status["scf_converged"] = False
                         scf_done = True
                         logger.debug(f"SCF not converged found in: {line_stripped}")
 
-                # Return as soon as either SCF or OPT is determined
-                if scf_done or opt_done:
-                    if not completion_found:
-                        logger.warning("Completion marker 'Total  Time' not found in log file")
+                # Return as soon as both SCF and OPT convergence is determined
+                if scf_done and opt_done:
                     return run_status
-
-            # Log if no convergence info found
-            if not scf_done:
-                logger.debug("No SCF convergence information found in log")
-            if not opt_done:
-                logger.debug("No OPT convergence information found in log")
+            if scf_done or opt_done:
+                return run_status
+            else:
+                # Error if both are still None after scanning entire file
+                logger.error("Convergence status not found in log file")
 
         except Exception as e:
             logger.error(f"Error checking calculation status: {e!s}")
-            run_status["scf_converged"] = "error"
-            run_status["opt_converged"] = "error"
+            run_status["scf_converged"] = False
+            run_status["opt_converged"] = False
             run_status["termination_marker"] = f"error: {e!s}"
 
         return run_status
