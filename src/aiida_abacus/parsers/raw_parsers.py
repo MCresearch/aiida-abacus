@@ -90,8 +90,7 @@ class AbacusRawParser(BaseRawParser):
                 self.results["number_of_bands"] = int(line.strip().split()[-1])
             elif "EFERMI" in line:
                 self.results["fermi_level"] = float(line.strip().split()[-2])
-
-        # Check calculation completion status
+        # Check calculation completion and convergence status
         self.results["run_status"] = self.compose_run_status()
 
         self.is_parsed = True
@@ -178,43 +177,83 @@ class AbacusRawParser(BaseRawParser):
 
     def compose_run_status(self) -> dict:
         """
-        Check if the calculation completed successfully by looking for 'Total  Time'
-        at the end of the running log file and compose the run status dictionary.
+        Check calculation completion and convergence status by scanning from the end of the log file.
+        Returns both run completion status and SCF/OPT convergence information.
 
-        :returns: Dictionary with completion status information
+        :returns: Dictionary with completion status, SCF convergence, and OPT convergence
         """
-        run_status = {"completed": False, "completion_marker_found": False, "termination_marker": None}
+        # Initialize run status
+        run_status = {
+            "completed": False, 
+            "completion_marker_found": False, 
+            "termination_marker": None,
+            "scf_converged": "unknown",
+            "opt_converged": "unknown"
+        }
 
         try:
             # Check if we have any lines to analyze
             if not self.lines:
-                logger.warning("Empty file content provided for completion check")
+                logger.warning("Empty file content provided for status check")
+                run_status["scf_converged"] = "error"
+                run_status["opt_converged"] = "error"
                 return run_status
 
-            # Get the last few lines to check for completion markers
-            last_lines = self.lines[-10:] if len(self.lines) >= 10 else self.lines
+            # Scan from the end of the log file
+            scf_done = False
+            opt_done = False
+            completion_found = False
 
-            # Check for ABACUS completion marker
-            completion_marker = "Total  Time"  # ABACUS standard completion marker
-
-            # Check for completion marker in the last lines
-            for line in reversed(last_lines):
+            for line in reversed(self.lines):
                 line_stripped = line.strip()
 
-                # Check for successful completion marker
-                if completion_marker in line_stripped:
+                # Check for ABACUS completion marker
+                if not completion_found and "Total  Time" in line_stripped:
                     run_status["completed"] = True
                     run_status["completion_marker_found"] = True
-                    run_status["termination_marker"] = completion_marker
-                    logger.info(f"Found completion marker '{completion_marker}' in line: {line_stripped}")
+                    run_status["termination_marker"] = "Total  Time"
+                    logger.info(f"Found completion marker 'Total  Time' in line: {line_stripped}")
+                    completion_found = True
+
+                # Check OPT/ionic convergence status
+                if not opt_done:
+                    if 'Relaxation is converged!' in line or 'ionic relaxation is converged' in line:
+                        run_status["opt_converged"] = "converged"
+                        opt_done = True
+                        logger.debug(f"OPT converged found in: {line_stripped}")
+                    elif ('not converged' in line.lower() and 'ionic' in line.lower()) or \
+                         'Lattice relaxation is not converged yet!' in line:
+                        run_status["opt_converged"] = "not_converged"
+                        opt_done = True
+                        logger.debug(f"OPT not converged found in: {line_stripped}")
+
+                # Check SCF/electronic convergence status
+                if not scf_done:
+                    if 'charge density convergence is achieved' in line or '#SCF IS CONVERGED#' in line:
+                        run_status["scf_converged"] = "converged"
+                        scf_done = True
+                        logger.debug(f"SCF converged found in: {line_stripped}")
+                    elif 'convergence has not been achieved' in line or 'SCF IS NOT CONVERGED' in line:
+                        run_status["scf_converged"] = "not_converged"
+                        scf_done = True
+                        logger.debug(f"SCF not converged found in: {line_stripped}")
+
+                # Return as soon as either SCF or OPT is determined
+                if scf_done or opt_done:
+                    if not completion_found:
+                        logger.warning("Completion marker 'Total  Time' not found in log file")
                     return run_status
 
-            # If no completion marker found, calculation is incomplete
-            logger.warning(f"Completion marker '{completion_marker}' not found in log file")
+            # Log if no convergence info found
+            if not scf_done:
+                logger.debug("No SCF convergence information found in log")
+            if not opt_done:
+                logger.debug("No OPT convergence information found in log")
 
         except Exception as e:
-            logger.error(f"Error checking calculation completion: {e!s}")
-            run_status["completed"] = False
+            logger.error(f"Error checking calculation status: {e!s}")
+            run_status["scf_converged"] = "error"
+            run_status["opt_converged"] = "error"
             run_status["termination_marker"] = f"error: {e!s}"
 
         return run_status
