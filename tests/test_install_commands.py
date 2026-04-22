@@ -5,18 +5,23 @@ import shutil
 import zipfile
 from pathlib import Path
 
+import click
 import pytest
+from click.testing import CliRunner
 
 from aiida_abacus.commands.pseudos import (
     SOURCE_CONFIGS,
-    SourceConfig,
     _extract_rcut_from_orb_name,
+    _make_collection_label,
     _make_label,
     _reorganize_github_orbitals,
     _select_orbital_by_rcut,
     _set_group_extras,
+    install_apns,
+    install_dojo,
+    install_sg15,
 )
-
+from aiida_abacus.group.orb_group import AtomicOrbitalCollection
 
 # ---------------------------------------------------------------------------
 # Unit tests for helper functions
@@ -34,6 +39,18 @@ class TestMakeLabel:
 
     def test_apns(self):
         assert _make_label("APNS", "v1", "PBE", "efficiency") == "APNS-v1-PBE-efficiency"
+
+
+class TestMakeCollectionLabel:
+    """Tests for the _make_collection_label function."""
+
+    def test_excludes_tag(self):
+        assert _make_collection_label("SG15", "v1.0", "PBE", "dzp") == "SG15-v1.0-PBE"
+
+    def test_groups_variants_together(self):
+        assert _make_collection_label("DOJO", "v0.4", "PBE-SR", "dzp") == _make_collection_label(
+            "DOJO", "v0.4", "PBE-SR", "tzdp"
+        )
 
 
 class TestExtractRcut:
@@ -104,10 +121,6 @@ class TestSetGroupExtras:
     """Tests for _set_group_extras."""
 
     def test_sets_extras(self, aiida_profile):
-        from aiida.orm import QueryBuilder
-
-        from aiida_abacus.group.orb_group import AtomicOrbitalCollection
-
         config = SOURCE_CONFIGS["sg15"]
         group = AtomicOrbitalCollection(label="test-extras-group")
         group.store()
@@ -192,8 +205,6 @@ class TestReorganizeGithubOrbitals:
 
     def test_reorganize_no_matching_tag(self, tmp_path, github_style_dir):
         """Test that a non-existent tag raises an error."""
-        import click
-
         target = tmp_path / "reorganized"
         with pytest.raises(click.Abort, match="No orbital directories found"):
             _reorganize_github_orbitals(github_style_dir, "tzdp", None, target)
@@ -226,10 +237,6 @@ class TestInstallSg15FromLocal:
 
     def test_dry_run(self, aiida_profile):
         """Test that dry-run works without database changes."""
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_sg15
-
         runner = CliRunner()
         result = runner.invoke(install_sg15, ["--dry-run"])
         assert result.exit_code == 0
@@ -238,10 +245,6 @@ class TestInstallSg15FromLocal:
 
     def test_dry_run_with_tag(self, aiida_profile):
         """Test dry-run with a non-default tag."""
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_sg15
-
         runner = CliRunner()
         result = runner.invoke(install_sg15, ["--dry-run", "--tag", "tzdp"])
         assert result.exit_code == 0
@@ -252,10 +255,6 @@ class TestInstallDojoDryRun:
     """Tests for install-dojo command."""
 
     def test_dry_run_sr(self, aiida_profile):
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_dojo
-
         runner = CliRunner()
         result = runner.invoke(install_dojo, ["--dry-run"])
         assert result.exit_code == 0
@@ -263,20 +262,12 @@ class TestInstallDojoDryRun:
         assert "SR" in result.output
 
     def test_dry_run_fr(self, aiida_profile):
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_dojo
-
         runner = CliRunner()
         result = runner.invoke(install_dojo, ["--dry-run", "--relativistic", "FR"])
         assert result.exit_code == 0
         assert "FR" in result.output
 
     def test_dry_run_with_lanthanides(self, aiida_profile):
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_dojo
-
         runner = CliRunner()
         result = runner.invoke(install_dojo, ["--dry-run", "--include-lanthanides"])
         assert result.exit_code == 0
@@ -286,22 +277,16 @@ class TestInstallApnsDryRun:
     """Tests for install-apns command."""
 
     def test_dry_run(self, aiida_profile):
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_apns
-
         runner = CliRunner()
         result = runner.invoke(install_apns, ["--dry-run"])
         assert result.exit_code == 0
         assert "APNS" in result.output
-        assert "efficiency" in result.output
+        assert "apns-efficiency-v1" in result.output
+        assert "apns-precision-v1" in result.output
 
-    def test_dry_run_precision(self, aiida_profile):
-        from click.testing import CliRunner
-
-        from aiida_abacus.commands.pseudos import install_apns
-
+    def test_dry_run_mentions_precision_has_no_default_family(self, aiida_profile):
         runner = CliRunner()
-        result = runner.invoke(install_apns, ["--dry-run", "--tag", "precision"])
+        result = runner.invoke(install_apns, ["--dry-run"])
         assert result.exit_code == 0
-        assert "precision" in result.output
+        assert "Family label: apns-efficiency-v1" in result.output
+        assert "Family label: (none; precision keeps multiple variants per element)" in result.output

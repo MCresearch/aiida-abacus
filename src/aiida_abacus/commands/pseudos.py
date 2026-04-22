@@ -22,7 +22,7 @@ import tabulate
 from aiida import orm as aiida_orm
 from aiida.cmdline.utils import echo
 from aiida.cmdline.utils.decorators import with_dbenv
-from aiida.orm import QueryBuilder, load_group, load_node
+from aiida.orm import QueryBuilder, load_node
 from click_spinner import spinner as cli_spinner
 
 from ..group.orb_group import (
@@ -62,7 +62,7 @@ SOURCE_CONFIGS = {
         version="v1.0",
         functional="PBE",
         url=_ABACUS_ORBITALS_URL,
-        md5="",  # will be computed on first use / updated manually
+        md5="2c9dc00190dbc4a0ab73cd677ef3541d",  # will be computed on first use / updated manually
         commit=_ABACUS_ORBITALS_COMMIT,
         description="SG15 ONCV pseudopotentials with numerical atomic orbitals",
     ),
@@ -71,7 +71,7 @@ SOURCE_CONFIGS = {
         version="v0.4",
         functional="PBE",
         url=_ABACUS_ORBITALS_URL,
-        md5="",
+        md5="2c9dc00190dbc4a0ab73cd677ef3541d",
         commit=_ABACUS_ORBITALS_COMMIT,
         description="PseudoDojo norm-conserving scalar-relativistic pseudopotentials with orbitals",
     ),
@@ -80,7 +80,7 @@ SOURCE_CONFIGS = {
         version="v0.4",
         functional="PBE",
         url=_ABACUS_ORBITALS_URL,
-        md5="",
+        md5="2c9dc00190dbc4a0ab73cd677ef3541d",
         commit=_ABACUS_ORBITALS_COMMIT,
         description="PseudoDojo norm-conserving full-relativistic pseudopotentials with orbitals",
     ),
@@ -101,6 +101,15 @@ def _make_label(source: str, version: str, functional: str, tag: str) -> str:
     return f"{source}-{version}-{functional}-{tag}"
 
 
+def _make_collection_label(source: str, version: str, functional: str, tag: str) -> str:
+    """Build a collection label without the orbital tag.
+
+    Collections group all orbital types for the same source/version/functional,
+    so the tag (e.g. ``dzp``, ``tzdp``) is intentionally excluded.
+    """
+    return f"{source}-{version}-{functional}"
+
+
 def _set_group_extras(group, source: SourceConfig, tag: str, download_url: str):
     """Store version metadata as group extras."""
     group.base.extras.set("source", source.name)
@@ -112,27 +121,58 @@ def _set_group_extras(group, source: SourceConfig, tag: str, download_url: str):
     group.base.extras.set("install_date", datetime.now().isoformat())
 
 
+def _get_unique_group_by_label(group_cls, label: str, entity_name: str):
+    """Return a unique group of the requested class for a label."""
+    qb = QueryBuilder()
+    qb.append(group_cls, filters={"label": label})
+    groups = [row[0] for row in qb.all()]
+
+    if len(groups) > 1:
+        raise click.Abort(f"Multiple {entity_name.lower()}s found with label '{label}'. Resolve duplicates first.")
+
+    return groups[0] if groups else None
+
+
+def _get_collection(label: str):
+    """Return a unique collection by label."""
+    return _get_unique_group_by_label(AtomicOrbitalCollection, label, "collection")
+
+
+def _get_family(label: str):
+    """Return a unique family by label."""
+    return _get_unique_group_by_label(AtomicOrbitalFamily, label, "family")
+
+
+def _prepare_group_for_install(label: str, group_cls, entity_name: str, update: bool):
+    """Return an existing group or remove it if update was requested."""
+    existing = _get_unique_group_by_label(group_cls, label, entity_name)
+
+    if existing is None:
+        return None
+
+    if update:
+        echo.echo_info(f"Removing existing {entity_name.lower()} '{label}' for update...")
+        existing.delete()
+        return None
+
+    return existing
+
+
 def _check_already_installed(label: str, source: SourceConfig, tag: str, update: bool) -> bool:
     """Check if a family with matching version extras already exists.
 
     Returns True if the install should be skipped.
     """
-    try:
-        existing = load_group(label)
-        if not update:
-            existing_version = existing.base.extras.get("version", None)
-            existing_tag = existing.base.extras.get("tag", None)
-            if existing_version == source.version and existing_tag == tag:
-                echo.echo_info(
-                    f"Family '{label}' already installed (version={existing_version}, tag={existing_tag}). "
-                    "Use --update to force re-install."
-                )
-                return True
-        else:
-            echo.echo_info(f"Removing existing family '{label}' for update...")
-            existing.delete()
-    except Exception:
-        pass
+    existing = _prepare_group_for_install(label, AtomicOrbitalFamily, "family", update)
+    if existing is not None:
+        existing_version = existing.base.extras.get("version", None)
+        existing_tag = existing.base.extras.get("tag", None)
+        if existing_version == source.version and existing_tag == tag:
+            echo.echo_info(
+                f"Family '{label}' already installed (version={existing_version}, tag={existing_tag}). "
+                "Use --update to force re-install."
+            )
+            return True
     return False
 
 
@@ -274,7 +314,7 @@ def _install_from_source(
     config = SOURCE_CONFIGS[source_key]
     func = functional or config.functional
     label = _make_label(config.name, config.version, func, tag)
-    collection_label = f"{config.name}-{config.version}-{func}"
+    collection_label = _make_collection_label(config.name, config.version, func, tag)
 
     if dry_run:
         echo.echo_info("DRY RUN - would perform the following:")
@@ -292,6 +332,8 @@ def _install_from_source(
     # Check if already installed
     if _check_already_installed(label, config, tag, update):
         return
+
+    existing_collection = _prepare_group_for_install(collection_label, AtomicOrbitalCollection, "collection", update)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -368,18 +410,23 @@ def _install_from_source(
                             shutil.copy2(f, reorg_dir / "Orbitals" / f.name)
 
         # Step 3: Import into collection
-        echo.echo_info(f"Importing into collection '{collection_label}'...")
-        with cli_spinner():
-            collection = AtomicOrbitalCollection.import_orbital_set(
-                repository=reorg_dir.parent,
-                set_name=collection_label,
-                dryrun=False,
-                group_label=collection_label,
-            )
+        if existing_collection is not None:
+            echo.echo_info(f"Collection '{collection_label}' already exists, reusing it.")
+            collection = existing_collection
+        else:
+            echo.echo_info(f"Importing into collection '{collection_label}'...")
+            with cli_spinner():
+                collection = AtomicOrbitalCollection.import_orbital_set(
+                    repository=reorg_dir.parent,
+                    set_name=collection_label,
+                    dryrun=False,
+                    group_label=collection_label,
+                )
 
-        if collection is None:
-            echo.echo_info("Collection already exists, reusing it.")
-            collection = load_group(collection_label)
+            if collection is None:
+                collection = _get_collection(collection_label)
+                if collection is None:
+                    raise click.Abort(f"Collection '{collection_label}' was not created by the import process.")
 
         collection.description = config.description
         _set_group_extras(collection, config, tag, config.url)
@@ -393,6 +440,123 @@ def _install_from_source(
         _set_group_extras(family, config, tag, config.url)
         echo.echo_success(f"Family '{label}': {family.count()} elements")
         echo.echo(f"  Elements: {', '.join(sorted(n.element for n in family.nodes))}")
+
+
+def _find_apns_dir(root: Path, name: str) -> Path | None:
+    """Find a directory with the exact name anywhere under root."""
+    matches = [path for path in root.rglob(name) if path.is_dir()]
+    if len(matches) > 1:
+        raise click.Abort(f"Multiple APNS directories named '{name}' found in '{root}'.")
+    return matches[0] if matches else None
+
+
+def _stage_apns_collection(
+    repo_path: Path, collection_label: str, pseudopotential_dir: Path, orbital_dir: Path
+) -> None:
+    """Create a temporary import repository for one APNS collection."""
+    collection_repo = repo_path / collection_label
+    collection_repo.mkdir()
+    (collection_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
+    (collection_repo / "Orbitals").symlink_to(orbital_dir, target_is_directory=True)
+
+
+def _install_apns_collection(
+    repo_path: Path,
+    set_name: str,
+    description: str,
+    source: SourceConfig,
+    update: bool,
+) -> AtomicOrbitalCollection:
+    """Import or reuse a single APNS collection."""
+    collection = _prepare_group_for_install(set_name, AtomicOrbitalCollection, "collection", update)
+
+    if collection is None:
+        echo.echo_info(f"Importing into collection '{set_name}'...")
+        with cli_spinner():
+            collection = AtomicOrbitalCollection.import_orbital_set(
+                repository=repo_path,
+                set_name=set_name,
+                dryrun=False,
+                group_label=set_name,
+            )
+
+        if collection is None:
+            collection = _get_collection(set_name)
+            if collection is None:
+                raise click.Abort(f"Collection '{set_name}' was not created by the import process.")
+    else:
+        echo.echo_info(f"Collection '{set_name}' already exists, reusing it.")
+
+    collection.description = description
+    series = set_name.removeprefix("apns-").removesuffix("-v1")
+    _set_group_extras(collection, source, series, source.url)
+    echo.echo_success(f"Collection '{set_name}': {collection.count()} orbitals")
+    return collection
+
+
+def _install_apns_bundle(cache_file: Path, update: bool = False, dry_run: bool = False) -> None:
+    """Install the APNS archive as two collections plus one default family."""
+    config = SOURCE_CONFIGS["apns"]
+    efficiency_label = "apns-efficiency-v1"
+    precision_label = "apns-precision-v1"
+
+    if dry_run:
+        echo.echo_info("DRY RUN - would perform the following:")
+        echo.echo(f"  Source: {config.name} {config.version}")
+        echo.echo(f"  Collection label: {efficiency_label}")
+        echo.echo(f"  Family label: {efficiency_label}")
+        echo.echo(f"  Collection label: {precision_label}")
+        echo.echo("  Family label: (none; precision keeps multiple variants per element)")
+        return
+
+    with temporary_unzip_folder(cache_file) as extracted:
+        pseudopotential_dir = _find_apns_dir(extracted, "apns-pseudopotentials-v1")
+        efficiency_orbitals = _find_apns_dir(extracted, "apns-orbitals-efficiency-v1")
+        precision_orbitals = _find_apns_dir(extracted, "apns-orbitals-precision-v1")
+
+        if pseudopotential_dir is None or efficiency_orbitals is None:
+            raise click.Abort(
+                "Expected APNS directories were not found. Need 'apns-pseudopotentials-v1' and "
+                "'apns-orbitals-efficiency-v1'."
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _stage_apns_collection(repo_path, efficiency_label, pseudopotential_dir, efficiency_orbitals)
+            if precision_orbitals is not None:
+                _stage_apns_collection(repo_path, precision_label, pseudopotential_dir, precision_orbitals)
+
+            efficiency_collection = _install_apns_collection(
+                repo_path,
+                efficiency_label,
+                "APNS efficiency orbital collection (v1)",
+                config,
+                update,
+            )
+
+            family = _prepare_group_for_install(efficiency_label, AtomicOrbitalFamily, "family", update)
+            if family is None:
+                echo.echo_info(f"Creating default family '{efficiency_label}'...")
+                with cli_spinner():
+                    family = _create_default_family(
+                        efficiency_collection,
+                        efficiency_label,
+                        config,
+                        "efficiency",
+                    )
+                _set_group_extras(family, config, "efficiency", config.url)
+                echo.echo_success(f"Family '{efficiency_label}': {family.count()} elements")
+            else:
+                echo.echo_info(f"Family '{efficiency_label}' already exists, reusing it.")
+
+            if precision_orbitals is not None:
+                _install_apns_collection(
+                    repo_path,
+                    precision_label,
+                    "APNS precision orbital collection (v1) - multiple variants per element",
+                    config,
+                    update,
+                )
 
 
 def _reorganize_apns(archive_path: Path, tag: str, target_dir: Path) -> None:
@@ -464,12 +628,9 @@ def _create_default_family(
                 break
         nodes_to_add.append(load_node(selected["pk"]))
 
-    try:
-        existing = load_group(family_label)
-
+    existing = _get_family(family_label)
+    if existing is not None:
         raise click.Abort(f"Family '{family_label}' already exists (PK={existing.pk})")
-    except Exception:
-        pass
 
     family = AtomicOrbitalFamily(label=family_label)
     family.store()
@@ -705,148 +866,9 @@ def _download_and_verify(url: str, expected_md5: str, name: str, force_download:
     return cache_file
 
 
-def _import_apns_set(cache_file: Path) -> None:
+def _import_apns_set(cache_file: Path, update: bool = False, dry_run: bool = False) -> None:
     """Import APNS pseudopotential set with special multi-collection structure."""
-    # Extract and process the archive
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        echo.echo_info(f"Extracting archive to {temp_path}")
-
-        with cli_spinner():
-            with zipfile.ZipFile(cache_file, "r") as zip_ref:
-                zip_ref.extractall(temp_path)
-
-        # Find the extracted directories
-        extracted_dirs = [d for d in temp_path.iterdir() if d.is_dir()]
-        echo.echo_info(f"Extracted directories: {[d.name for d in extracted_dirs]}")
-
-        # Look for the expected structure:
-        # - apns-orbitals-efficiency-v1/
-        # - apns-pseudopotentials-v1/
-        # - apns-orbitals-precision-v1/
-        orbital_efficiency_dir = None
-        pseudopotential_dir = None
-        orbital_precision_dir = None
-
-        for dir_path in extracted_dirs:
-            dir_name = dir_path.name
-            if "orbitals-efficiency" in dir_name:
-                orbital_efficiency_dir = dir_path
-            elif "pseudopotentials" in dir_name:
-                pseudopotential_dir = dir_path
-            elif "orbitals-precision" in dir_name:
-                orbital_precision_dir = dir_path
-
-        if not orbital_efficiency_dir or not pseudopotential_dir:
-            raise click.Abort(
-                "Expected directory structure not found. "
-                f"Looking for directories containing 'orbitals-efficiency' and 'pseudopotentials'. "
-                f"Found: {[d.name for d in extracted_dirs]}"
-            )
-
-        echo.echo_success(f"Found orbital directory: {orbital_efficiency_dir.name}")
-        echo.echo_success(f"Found pseudopotential directory: {pseudopotential_dir.name}")
-        if orbital_precision_dir:
-            echo.echo_success(f"Found precision orbital directory: {orbital_precision_dir.name}")
-
-        # Create a temporary structured repository
-        # Structure: temp_repo/apns-efficiency-v1/{Pseudopotential/, Orbitals/}
-        #            temp_repo/apns-precision-v1/{Pseudopotential/, Orbitals/}
-        repo_path = temp_path / "repository"
-        repo_path.mkdir()
-
-        collections_to_create = []
-
-        # Efficiency collection
-        efficiency_repo = repo_path / "apns-efficiency-v1"
-        efficiency_repo.mkdir()
-        (efficiency_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
-        (efficiency_repo / "Orbitals").symlink_to(orbital_efficiency_dir, target_is_directory=True)
-        collections_to_create.append(
-            {
-                "name": "apns-efficiency-v1",
-                "set_name": "apns-efficiency-v1",
-                "description": "APNS efficiency orbital collection (v1) - all variants",
-            }
-        )
-
-        # Precision collection (if available)
-        if orbital_precision_dir:
-            precision_repo = repo_path / "apns-precision-v1"
-            precision_repo.mkdir()
-            (precision_repo / "Pseudopotential").symlink_to(pseudopotential_dir, target_is_directory=True)
-            (precision_repo / "Orbitals").symlink_to(orbital_precision_dir, target_is_directory=True)
-            collections_to_create.append(
-                {
-                    "name": "apns-precision-v1",
-                    "set_name": "apns-precision-v1",
-                    "description": "APNS precision orbital collection (v1) - all variants",
-                }
-            )
-
-        echo.echo_info(f"Will create {len(collections_to_create)} orbital collections")
-
-        # Import each collection
-        created_collections = []
-        for collection_info in collections_to_create:
-            collection_name = collection_info["name"]
-            set_name = collection_info["set_name"]
-            description = collection_info["description"]
-
-            # Check if collection already exists
-            try:
-                existing_collection = load_group(label=collection_name)
-                echo.echo_warning(
-                    f"Collection '{collection_name}' already exists with {existing_collection.count()} orbitals"
-                )
-                if click.confirm(f"Do you want to skip importing '{collection_name}'?", default=True):
-                    continue
-                else:
-                    echo.echo_info(f"Re-importing '{collection_name}'")
-            except Exception:
-                echo.echo_info(f"Creating new collection '{collection_name}'")
-
-            try:
-                echo.echo(f"Importing {collection_name}...")
-                with cli_spinner():
-                    collection = AtomicOrbitalCollection.import_orbital_set(
-                        repository=repo_path,
-                        set_name=set_name,
-                        dryrun=False,
-                        group_label=collection_name,
-                    )
-
-                if collection is not None:
-                    collection.description = description
-                    created_collections.append((collection_name, collection.count()))
-                    echo.echo_success(
-                        f"Successfully imported collection '{collection_name}' with {collection.count()} orbitals"
-                    )
-                else:
-                    echo.echo_info(f"Collection '{collection_name}' already up to date")
-
-            except Exception as e:
-                echo.echo_error(f"Failed to import collection '{collection_name}': {e}")
-                if not click.confirm("Continue with other collections?", default=True):
-                    break
-
-        if created_collections:
-            echo.echo("")
-            echo.echo_success("Import process completed!")
-            echo.echo_info("Created collections:")
-            for coll_name, count in created_collections:
-                echo.echo(f"  - {coll_name}: {count} orbitals")
-            echo.echo("")
-            echo.echo_info("Next steps:")
-            echo.echo("  1. List collections: aiida-abacus pseudos list-collections")
-            echo.echo("  2. Show collection details: aiida-abacus pseudos show-collection <label>")
-            echo.echo(
-                "  3. Create family: aiida-abacus pseudos create-family <collection> <family> "
-                "--orbital-type dzp --rcuts <json>"
-            )
-        else:
-            echo.echo_info("No new collections were created")
+    _install_apns_bundle(cache_file, update=update, dry_run=dry_run)
 
 
 def _install_from_known_set(name: str, force_download: bool, dry_run: bool) -> None:
@@ -922,12 +944,12 @@ def _install_from_local_paths(paths: tuple[str, ...], label: str, description: s
         return
 
     # Check if collection already exists
-    try:
-        existing_collection = load_group(label=label)
+    existing_collection = _get_collection(label)
+    if existing_collection is not None:
         echo.echo_warning(f"Collection '{label}' already exists with {existing_collection.count()} orbitals")
         if not click.confirm("Do you want to continue (may add duplicates)?", default=False):
             raise click.Abort()
-    except Exception:
+    else:
         echo.echo_info(f"Creating new collection '{label}'")
 
     # Import from paths
@@ -1012,7 +1034,9 @@ def list_families() -> None:
             node_count = qb_count.count()
 
             # Get variant choices if available
-            family = load_group(label)
+            family = _get_family(label)
+            if family is None:
+                raise click.Abort()
             variant_choices = family.base.extras.get("variant_choices", {})
             if variant_choices:
                 variant_info = f"{len(variant_choices)} elements with variants"
@@ -1120,7 +1144,9 @@ def list_collections() -> None:
         table_data = []
         for pk, label, description in collections:
             # Load the collection to get statistics
-            collection = load_group(label)
+            collection = _get_collection(label)
+            if collection is None:
+                raise click.Abort()
             stats = collection.get_statistics()
 
             # Calculate max variants per element
@@ -1259,13 +1285,9 @@ def create_family(collection_label: str, family_label: str, description: str) ->
         aiida-abacus pseudos create-family apns-efficiency-v1 my-family
     """
     # Check if collection exists
-    try:
-        collection = load_group(collection_label)
-        if not isinstance(collection, AtomicOrbitalCollection):
-            echo.echo_error(f"Group '{collection_label}' is not an AtomicOrbitalCollection")
-            raise click.Abort()
-    except Exception as e:
-        echo.echo_error(f"Collection '{collection_label}' not found: {e}")
+    collection = _get_collection(collection_label)
+    if collection is None:
+        echo.echo_error(f"Collection '{collection_label}' not found.")
         echo.echo_info("Available collections:")
         qb = QueryBuilder()
         qb.append(AtomicOrbitalCollection, project=["label"])
@@ -1274,12 +1296,9 @@ def create_family(collection_label: str, family_label: str, description: str) ->
         raise click.Abort()
 
     # Check if family already exists
-    try:
-        load_group(family_label)
+    if _get_family(family_label) is not None:
         echo.echo_error(f"Family '{family_label}' already exists")
         raise click.Abort()
-    except Exception:
-        pass  # Family doesn't exist, which is what we want
 
     # Display collection info
     stats = collection.get_statistics()
@@ -1421,7 +1440,7 @@ def install_dojo(
     config = SOURCE_CONFIGS[source_key]
     func = functional or config.functional
     label = _make_label(config.name, config.version, f"{func}-{relativistic}", tag)
-    collection_label = f"{config.name}-{config.version}-{func}-{relativistic}"
+    collection_label = _make_collection_label(config.name, config.version, f"{func}-{relativistic}", tag)
 
     if dry_run:
         echo.echo_info("DRY RUN - would perform the following:")
@@ -1448,30 +1467,25 @@ def install_dojo(
 
 
 @pseudos.command("install-apns")
-@click.option(
-    "--tag",
-    default="efficiency",
-    type=click.Choice(["efficiency", "precision"]),
-    help="Orbital series tag.",
-)
-@click.option("--functional", default="PBE", help="XC functional.")
 @click.option("--update", is_flag=True, help="Force re-download and re-install.")
 @click.option("--dry-run", is_flag=True, help="Show what would be done.")
+@click.option(
+    "--source-path",
+    default=None,
+    type=click.Path(exists=True),
+    help="Local APNS zip archive (skip download).",
+)
 @with_dbenv()
-def install_apns(tag: str, functional: str, update: bool, dry_run: bool) -> None:
+def install_apns(update: bool, dry_run: bool, source_path: str | None) -> None:
     """Install APNS pseudopotential and orbital set.
 
-    Downloads from AISS Square and creates both a collection and a default family.
-
-    The default family label follows the pattern: APNS-v1-PBE-<tag>
+    Installs two lowercase APNS collections:
+    - ``apns-efficiency-v1``: collection plus default family of the same label
+    - ``apns-precision-v1``: collection only, preserving multiple orbital variants per element
     """
-    _install_from_source(
-        source_key="apns",
-        tag=tag,
-        functional=functional,
-        update=update,
-        dry_run=dry_run,
-    )
+    config = SOURCE_CONFIGS["apns"]
+    cache_file = Path(source_path) if source_path else _download_and_verify(config.url, config.md5, config.name, update)
+    _install_apns_bundle(cache_file, update=update, dry_run=dry_run)
 
 
 @pseudos.command("install-collection")

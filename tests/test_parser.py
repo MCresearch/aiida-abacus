@@ -343,6 +343,57 @@ def test_parser_returns_ionic_not_converged(calc_with_retrieved, tmp_path):
     assert "misc" not in parser.outputs
 
 
+def test_parser_returns_ionic_not_converged_with_structure_output(calc_with_retrieved, tmp_path):
+    file_path = tmp_path / "pw_relax_not_converged_with_structure"
+    _write_retrieved_tree(
+        file_path,
+        "cell-relax",
+        "\n".join(
+            [
+                " EFERMI = 1.23 eV",
+                " NBANDS = 8",
+                " Relaxation is not converged",
+                " Total  Time  :  1.0 s",
+            ]
+        ),
+    )
+    (file_path / "OUT.aiida" / "STRU_ION_D").write_text(
+        "\n".join(
+            [
+                "ATOMIC_SPECIES",
+                "Si 28.085 Si.upf",
+                "",
+                "NUMERICAL_ORBITAL",
+                "Si.orb",
+                "",
+                "LATTICE_CONSTANT",
+                "1.889726125457828",
+                "",
+                "LATTICE_VECTORS",
+                "5.1 0.0 0.0",
+                "0.0 5.1 0.0",
+                "0.0 0.0 5.1",
+                "",
+                "ATOMIC_POSITIONS",
+                "Cartesian_angstrom",
+                "Si",
+                "0.0",
+                "1",
+                "0.0 0.0 0.0 1 1 1",
+            ]
+        )
+    )
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "cell-relax"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 303
+    assert "structure" in parser.outputs
+    assert "misc" not in parser.outputs
+
+
 def test_parser_returns_missing_output_files(calc_with_retrieved, tmp_path):
     file_path = tmp_path / "pw_relax_missing_final_structure"
     _write_retrieved_tree(

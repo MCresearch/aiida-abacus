@@ -102,6 +102,10 @@ class AbacusParser(Parser):
             self.logger.warning(f"Calculation did not complete successfully. Termination marker: {marker}")
             return self.exit_codes.ERROR_CALCULATION_INCOMPLETE
 
+        relax_structure = None
+        if run_type in RELAX_RUN_TYPES and f"OUT.{output_suffix}/STRU_ION_D" not in missing:
+            relax_structure = self._parse_relax_structure(output_folder, expected_files)
+
         if run_type in SCF_CONVERGENCE_CHECK_RUN_TYPES:
             final_scf_state = self._last_notification_name(notifications, {"scf_converged", "scf_not_converged"})
             final_ionic_state = self._last_notification_name(
@@ -119,6 +123,8 @@ class AbacusParser(Parser):
 
             # Check for ionic relaxation convergence failure
             if final_ionic_state in {"ionic_not_converged", "geometry_not_converged"}:
+                if relax_structure is not None:
+                    self.out("structure", relax_structure)
                 self.logger.warning("Ionic relaxation did not converge.")
                 return self.exit_codes.ERROR_IONIC_NOT_CONVERGED
 
@@ -161,15 +167,8 @@ class AbacusParser(Parser):
 
         # TODO: there could be other types that should have a output structure
         if run_type in ["relax", "cell-relax", "md"]:
-            # Parse the final structure
-            fname = next(filter(lambda x: "STRU_ION_D" in x, expected_files))
-            with output_folder.open(fname, "r") as fhandle:
-                parser = StruParser(fhandle)
-                cell, positions, species = parser.parse_structure()
-            node = orm.StructureData(cell=cell)
-            for pos, symbol in zip(positions, species):
-                node.append_atom(position=pos, symbols=symbol)
-            self.out("structure", node)
+            if relax_structure is not None:
+                self.out("structure", relax_structure)
             # Compose trajectory node
             trajectory = self._compose_trajectory(output_folder, misc_results)
             if trajectory:
@@ -235,6 +234,18 @@ class AbacusParser(Parser):
             if name in names:
                 return name
         return None
+
+    @staticmethod
+    def _parse_relax_structure(output_folder, expected_files):
+        """Parse the final structure emitted by a relax-like calculation."""
+        fname = next(filter(lambda x: "STRU_ION_D" in x, expected_files))
+        with output_folder.open(fname, "r") as fhandle:
+            parser = StruParser(fhandle)
+            cell, positions, species = parser.parse_structure()
+        node = orm.StructureData(cell=cell)
+        for pos, symbol in zip(positions, species):
+            node.append_atom(position=pos, symbols=symbol)
+        return node
 
     def check_include_node(self, name: str):
         """
