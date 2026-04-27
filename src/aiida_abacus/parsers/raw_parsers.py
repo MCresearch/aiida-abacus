@@ -78,6 +78,8 @@ class AbacusRawParser(BaseRawParser):
         self.parse_blocks()
         # Parse the lines one-by-one for general information of the calculation
         self.results["energies"] = []  # Container for the per-ionic-step energies in eV
+        self.results["electronic_energies"] = []
+        current_ion = -1
         for line in self.lines:
             if "TOTAL-pressure" in line:
                 self.results["total_pressure"] = float(line.strip().split()[-2])
@@ -90,6 +92,16 @@ class AbacusRawParser(BaseRawParser):
                 self.results["number_of_bands"] = int(line.strip().split()[-1])
             elif "EFERMI" in line:
                 self.results["fermi_level"] = float(line.strip().split()[-2])
+            elif "ION=" in line and "ELEC=" in line:
+                parts = line.strip().split()
+                for i, p in enumerate(parts):
+                    if p == "ION=":
+                        current_ion = int(parts[i + 1]) - 1
+                        break
+                while len(self.results["electronic_energies"]) <= current_ion:
+                    self.results["electronic_energies"].append([])
+            elif "E_KohnSham" in line and current_ion >= 0:
+                self.results["electronic_energies"][current_ion].append(float(line.strip().split()[-1]))
 
         # Check calculation completion status
         self.results["run_status"] = self.compose_run_status()
