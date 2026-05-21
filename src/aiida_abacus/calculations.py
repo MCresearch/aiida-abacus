@@ -192,6 +192,22 @@ class AbacusCalculation(CalcJob):
             "ERROR_CALCULATION_INCOMPLETE",
             message="Calculation did not complete successfully - 'Total Time' not found at end of running log.",
         )
+        spec.exit_code(
+            410,
+            "ERROR_SCF_NOT_CONVERGED",
+            message="SCF calculation did not converge within the specified electronic minimization steps.",
+        )
+        spec.exit_code(
+            500,
+            "ERROR_IONIC_NOT_CONVERGED",
+            message="Ionic minimization did not converge within the specified iterations.",
+        )
+        spec.exit_code(
+            501,
+            "ERROR_IONIC_CONVERGED_BUT_SCF_FAILED",
+            message="Ionic minimization converged but final SCF calculation did not converge.",
+        )
+
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
         spec.default_output_node = "misc"
 
