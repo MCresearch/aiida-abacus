@@ -94,7 +94,7 @@ class AbacusParser(Parser):
             node.set_bands(eigenvalues, occupations=occupations)
 
             # Handle kpoints labels - ABACUS may remove duplicate kpoints
-            if hasattr(self.node.inputs, 'kpoints') and hasattr(self.node.inputs.kpoints, 'labels'):
+            if hasattr(self.node.inputs, "kpoints") and hasattr(self.node.inputs.kpoints, "labels"):
                 input_labels = self.node.inputs.kpoints.labels
                 if input_labels:
                     input_kpoints = self.node.inputs.kpoints.get_kpoints()
