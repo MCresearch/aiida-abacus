@@ -71,6 +71,10 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             cls.run_bands_dos,
             cls.verify_bands_dos,
         )
+        spec.exit_code(401, "ERROR_RELAX_PROCESS_FAILED", message="The relax process failed.")
+        spec.exit_code(402, "ERROR_SCF_PROCESS_FAILED", message="The SCF process failed.")
+        spec.exit_code(403, "ERROR_SUB_PROC_BANDS_FAILED", message="The bands subprocess failed.")
+        spec.exit_code(404, "ERROR_SUB_PROC_DOS_FAILED", message="The DOS subprocess failed.")
         spec.output("band_structure", valid_type=orm.BandsData, help="Output band structure data.")
         spec.output(
             "primitive_structure",
