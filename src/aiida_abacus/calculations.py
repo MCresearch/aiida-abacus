@@ -208,11 +208,6 @@ class AbacusCalculation(CalcJob):
             message="SCF calculation did not converge within the specified electronic minimization steps.",
         )
         spec.exit_code(
-            500,
-            "ERROR_IONIC_NOT_CONVERGED",
-            message="Ionic minimization did not converge within the specified iterations.",
-        )
-        spec.exit_code(
             501,
             "ERROR_IONIC_CONVERGED_BUT_SCF_FAILED",
             message="Ionic minimization converged but final SCF calculation did not converge.",
