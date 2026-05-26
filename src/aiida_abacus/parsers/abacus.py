@@ -92,7 +92,24 @@ class AbacusParser(Parser):
             node.set_kpoints(kcoord, weights=kweights)
             assert kcoord.shape[0] == eigenvalues.shape[1], "Inconsistent number of kpoints reported (do not use kpar)"
             node.set_bands(eigenvalues, occupations=occupations)
-            node.labels = self.node.inputs.kpoints.labels
+
+            # Handle kpoints labels - ABACUS may remove duplicate kpoints
+            if hasattr(self.node.inputs, 'kpoints') and hasattr(self.node.inputs.kpoints, 'labels'):
+                input_labels = self.node.inputs.kpoints.labels
+                if input_labels:
+                    input_kpoints = self.node.inputs.kpoints.get_kpoints()
+                    n_input = len(input_kpoints)
+                    n_output = kcoord.shape[0]
+
+                    # Only remap labels if ABACUS removed duplicate kpoints
+                    if n_input != n_output:
+                        remapped = self._remap_kpoint_labels(input_kpoints, input_labels, kcoord, self.logger)
+                        if remapped is not None:
+                            node.labels = remapped
+                    else:
+                        # No duplicates, use labels as-is
+                        node.labels = input_labels
+
             # Record the fermi level - the unit is eV
             node.base.attributes.set("fermi_level", misc_node.get("fermi_level"))
             self.out("bands", node)
@@ -226,3 +243,59 @@ class AbacusParser(Parser):
             traj.set_array("stresses", np.array(data_dict["stresses"]))
             traj.base.attributes.set("stress_unit", data_dict["stress_unit"])
         return traj
+
+    @staticmethod
+    def _remap_kpoint_labels(input_kpoints, input_labels, output_kpoints, logger):
+        """
+        Remap kpoint labels when ABACUS removes duplicate kpoints.
+
+        ABACUS may remove duplicate kpoints from the input path (e.g., when the path
+        returns to a high-symmetry point like GAMMA). This function remaps the labels
+        to match the output kpoints.
+
+        :param input_kpoints: List of input kpoint coordinates
+        :param input_labels: List of (index, label_name) tuples from input
+        :param output_kpoints: Array of output kpoint coordinates (after deduplication)
+        :param logger: Logger instance for debug/info messages
+        :return: Remapped list of (index, label_name) tuples, or None if no labels to apply
+        """
+        n_input = len(input_kpoints)
+        n_output = output_kpoints.shape[0]
+
+        logger.info(
+            f"Input has {n_input} kpoints but output has {n_output} kpoints. "
+            f"ABACUS removed {n_input - n_output} duplicate kpoint(s)."
+        )
+
+        # Build mapping from input index to output index
+        label_mapping = {}
+        output_index = 0
+
+        for input_idx in range(n_input):
+            if output_index >= n_output:
+                break
+
+            # Check if this input kpoint matches the current output kpoint
+            # Use modulo 1 to handle periodic boundary conditions in reciprocal space
+            input_kpt = np.array(input_kpoints[input_idx][:3])
+            output_kpt = output_kpoints[output_index]
+            diff = np.abs((input_kpt - output_kpt + 0.5) % 1.0 - 0.5)
+
+            if np.all(diff < 1e-6):
+                label_mapping[input_idx] = output_index
+                output_index += 1
+
+        # Remap labels using the mapping
+        remapped_labels = []
+        for old_idx, label_name in input_labels:
+            if old_idx in label_mapping:
+                new_idx = label_mapping[old_idx]
+                remapped_labels.append((new_idx, label_name))
+                logger.debug(f"Remapped label '{label_name}': index {old_idx} -> {new_idx}")
+            else:
+                logger.debug(f"Skipped label '{label_name}' at index {old_idx} (kpoint was removed as duplicate)")
+
+        if remapped_labels:
+            logger.info(f"Applied {len(remapped_labels)} labels to bands data")
+
+        return remapped_labels if remapped_labels else None
