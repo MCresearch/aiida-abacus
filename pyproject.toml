@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 # See https://www.python.org/dev/peps/pep-0621/
@@ -33,8 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 pre-commit = [
-  'pre-commit~=3.5',
-  'hatch',
+    "pre-commit~=3.5",
 ]
 docs = [
     "sphinx~=6.2.1",
@@ -56,8 +55,21 @@ tutorial = [
     "aiida-vasp",
     "sumo",
 ]
+testing = [
+    "pgtest~=1.3,>=1.3.1",
+    "coverage~=7.0",
+    "pytest~=7.0",
+    "pytest-cov~=4.1",
+    "ipdb",
+]
 dev = [
-    "ruff>=0.12.12",
+    "pgtest~=1.3,>=1.3.1",
+    "coverage~=7.0",
+    "pytest~=7.0",
+    "pytest-cov~=4.1",
+    "ipdb",
+    "ruff",
+    "pre-commit~=3.5",
 ]
 
 [project.urls]
@@ -138,56 +150,17 @@ inline-quotes = "double"
 multiline-quotes = "double"
 docstring-quotes = "double"
 
-## Hatch configurations
+[tool.setuptools.dynamic]
+version = {attr = "aiida_abacus.__version__"}
 
-[tool.hatch.version]
-path = "src/aiida_abacus/__init__.py"
+[tool.setuptools]
+include-package-data = true
 
-[tool.hatch.build.targets.sdist]
-exclude = [
-  "docs/",
-  "tests/",
-]
+[tool.setuptools.packages.find]
+where = ["src"]
 
-[tool.hatch.envs.hatch-test]
-dependencies = [
-    'pgtest~=1.3,>=1.3.1',
-    'coverage~=7.0',
-    'pytest~=7.0',
-    "pytest-cov~=4.1",
-    "ipdb"
-]
-
-[tool.hatch.envs.hatch-test.scripts]
-# These are the efault scripts provided by hatch.
-# The have been copied to make the execution more transparent
-
-# This command is run with the command `hatch test`
-run = "pytest{env:HATCH_TEST_ARGS:} {args}"
-# The three commands below are run with the command `hatch test --coverage`
-run-cov = "coverage run -m pytest{env:HATCH_TEST_ARGS:} {args}"
-cov-combine = "coverage combine"
-cov-report = "coverage report"
-
-[[tool.hatch.envs.hatch-test.matrix]]
-python = ["3.9", "3.10", "3.11", "3.12"]
-
-[tool.hatch.envs.hatch-static-analysis]
-dependencies = ["ruff==0.4.3"]
-
-[tool.hatch.envs.hatch-static-analysis.scripts]
-# Fixes are executed with `hatch fmt`.
-# Checks are executed with `hatch fmt --check`.
-
-format-check = "ruff format --check --config pyproject.toml {args:.}"
-format-fix = "ruff format --config pyproject.toml {args:.}"
-lint-check = "ruff check --config pyproject.toml {args:.}"
-lint-fix = "ruff check --config pyproject.toml --fix --exit-non-zero-on-fix --show-fixes {args:.}"
-
-[tool.hatch.envs.docs]
-features = ["docs"]
-
-[tool.hatch.envs.docs.scripts]
-build = [
-  "make -C docs"
+[tool.setuptools.package-data]
+aiida_abacus = [
+    "protocols/*.yaml",
+    "protocols/presets/*.yaml",
 ]

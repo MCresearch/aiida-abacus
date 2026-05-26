@@ -8,7 +8,7 @@ from aiida import orm
 from aiida.common import AttributeDict
 from aiida.engine.processes import PortNamespace
 
-DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "device.log", "warning.log", "istate.info", "STRU_ION_D", "STRU_ION*_D")
+DEFAULT_RETRIEVE_FILES = ("INPUT", "kpoints", "warning.log", "STRU_ION_D", "STRU_ION*_D")
 
 
 def make_retrieve_list(

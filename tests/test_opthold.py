@@ -1,5 +1,6 @@
 import pytest
 from aiida import orm
+
 from aiida_abacus.common.opthold import BandOptions, OptionContainer, SettingsOptions
 
 

@@ -2,14 +2,14 @@
 
 from click.testing import CliRunner
 
+from aiida_abacus.commands.pseudos import list_families, list_sets, show_family
+
 
 class TestOrbitalCommands:
     """Test the orbital-related CLI commands."""
 
     def test_list_families_command(self, aiida_profile_clean, si_orbital_family):
         """Test pseudos list-families command output."""
-        from aiida_abacus.commands.pseudos import list_families
-
         runner = CliRunner()
         result = runner.invoke(list_families, [])
 
@@ -21,8 +21,6 @@ class TestOrbitalCommands:
 
     def test_show_family_command(self, aiida_profile_clean, si_orbital_family):
         """Test pseudos show-family command functionality."""
-        from aiida_abacus.commands.pseudos import show_family
-
         runner = CliRunner()
         result = runner.invoke(show_family, [si_orbital_family.label])
 
@@ -34,8 +32,6 @@ class TestOrbitalCommands:
 
     def test_show_family_nonexistent(self, aiida_profile_clean):
         """Test show-family command with non-existent family."""
-        from aiida_abacus.commands.pseudos import show_family
-
         runner = CliRunner()
         result = runner.invoke(show_family, ["nonexistent-family"])
 
@@ -44,8 +40,6 @@ class TestOrbitalCommands:
 
     def test_list_sets_command(self):
         """Test pseudos list-sets command."""
-        from aiida_abacus.commands.pseudos import list_sets
-
         runner = CliRunner()
         result = runner.invoke(list_sets, [])
 
@@ -54,8 +48,6 @@ class TestOrbitalCommands:
 
     def test_list_families_empty_filter(self, aiida_profile_clean):
         """Test list-families with empty result."""
-        from aiida_abacus.commands.pseudos import list_families
-
         runner = CliRunner()
         result = runner.invoke(list_families, [])
 

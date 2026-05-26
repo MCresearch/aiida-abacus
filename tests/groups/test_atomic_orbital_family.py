@@ -1,8 +1,12 @@
 """Tests for AtomicOrbitalFamily class."""
 
 import pytest
-from aiida.orm import load_group
+from aiida import orm
+from aiida.orm import QueryBuilder, load_group
 from aiida.plugins import GroupFactory
+from aiida_pseudo.groups.family import PseudoPotentialFamily
+from ase.build import bulk
+
 from aiida_abacus.data.orbital import AtomicOrbitalData
 from aiida_abacus.group.orb_group import AtomicOrbitalFamily
 
@@ -38,9 +42,6 @@ class TestAtomicOrbitalFamily:
 
     def test_get_pseudos_missing_elements(self, aiida_profile_clean, si_orbital_family):
         """Test get_pseudos with structure containing missing elements."""
-        from aiida import orm
-        from ase.build import bulk
-
         # Create structure with element not in family
         al_structure = orm.StructureData(ase=bulk("Al", "fcc", a=4.05))
 
@@ -70,8 +71,6 @@ class TestAtomicOrbitalFamily:
 
     def test_query_builder_integration(self, aiida_profile_clean, si_orbital_family):
         """Test QueryBuilder integration for family searches."""
-        from aiida.orm import QueryBuilder
-
         # Query by type string
         qb = QueryBuilder()
         qb.append(AtomicOrbitalFamily, filters={"label": si_orbital_family.label})
@@ -148,8 +147,6 @@ class TestAtomicOrbitalFamily:
 
     def test_inheritance_from_pseudopotential_family(self, si_orbital_family):
         """Test that AtomicOrbitalFamily properly inherits from PseudoPotentialFamily."""
-        from aiida_pseudo.groups.family import PseudoPotentialFamily
-
         # Should be an instance of PseudoPotentialFamily
         assert isinstance(si_orbital_family, PseudoPotentialFamily)
 

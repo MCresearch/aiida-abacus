@@ -1,11 +1,15 @@
 """Tests for ABACUS calculations."""
 
+from pathlib import Path
+
 from aiida import orm
 from aiida.common import exceptions
 from aiida.common.extendeddicts import AttributeDict
 from aiida.engine.utils import instantiate_process
 from aiida.manage.manager import get_manager
+
 from aiida_abacus.calculations import AbacusCalculation
+from aiida_abacus.common.opthold import SettingsOptions
 
 
 class TestAbacusCalculation:
@@ -45,17 +49,15 @@ class TestAbacusCalculation:
         assert isinstance(copy_list, list)
         assert len(copy_list) > 0
 
-    def test_settings_validation(self, abacus_code, si_structure, pseudo_familty, abacus_kpoints):
+    def test_settings_validation(self, abacus_code, si_structure, pseudo_family, abacus_kpoints):
         """Test validation of settings input."""
-        from aiida_abacus.common.opthold import SettingsOptions
-
         manager = get_manager()
         runner = manager.get_runner()
 
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw", "ecutwfc": 60}})
         inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
@@ -82,8 +84,6 @@ class TestAbacusCalculation:
         assert len(calcinfo.codes_info) == 1
 
         # Check that required files are created using pathlib.Path
-        from pathlib import Path
-
         assert Path(sandbox_folder.get_abs_path("INPUT")).exists()
         assert Path(sandbox_folder.get_abs_path("KPT")).exists()
         assert Path(sandbox_folder.get_abs_path("STRU")).exists()

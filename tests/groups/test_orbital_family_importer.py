@@ -3,7 +3,14 @@
 import zipfile
 
 import pytest
-from aiida_abacus.group.orb_group import OrbitalFamilyImporter
+
+from aiida_abacus.group.orb_group import (
+    AtomicOrbitalFamily,
+    OrbitalFamilyImporter,
+    parse_orb_filename,
+    parse_orb_metadata,
+    temporary_unzip_folder,
+)
 
 
 class TestOrbitalFamilyImporter:
@@ -54,8 +61,6 @@ class TestOrbitalFamilyImporter:
 
     def test_import_folder_dryrun(self, aiida_profile_clean, structured_orbital_repo):
         """Test dry-run mode that doesn't store results."""
-        from aiida_abacus.group.orb_group import AtomicOrbitalFamily
-
         initial_count = len(AtomicOrbitalFamily.collection.all())
 
         orbital_path = structured_orbital_repo / "Orbitals"
@@ -74,8 +79,6 @@ class TestOrbitalFamilyImporter:
 
     def test_temporary_unzip_context(self, aiida_profile_clean, sample_orbital_archive):
         """Test temporary unzip context manager."""
-        from aiida_abacus.group.orb_group import temporary_unzip_folder
-
         with temporary_unzip_folder(sample_orbital_archive) as temp_dir:
             assert temp_dir.exists()
             assert temp_dir.is_dir()
@@ -89,8 +92,6 @@ class TestOrbitalFamilyImporter:
 
     def test_temporary_unzip_context_with_directory(self, aiida_profile_clean, structured_orbital_repo):
         """Test temporary unzip context with directory (no extraction needed)."""
-        from aiida_abacus.group.orb_group import temporary_unzip_folder
-
         # When given a directory, it should just return the directory
         with temporary_unzip_folder(structured_orbital_repo) as temp_dir:
             assert temp_dir == structured_orbital_repo
@@ -101,8 +102,6 @@ class TestOrbitalFamilyImporter:
 
     def test_parse_orb_metadata(self, data_folder):
         """Test orbital file metadata parsing."""
-        from aiida_abacus.group.orb_group import parse_orb_metadata
-
         orbital_file = data_folder / "orbitals" / "Si_gga_7au_100Ry_2s2p1d.orb"
 
         metadata = parse_orb_metadata(orbital_file)
@@ -113,8 +112,6 @@ class TestOrbitalFamilyImporter:
 
     def test_parse_orb_filename(self):
         """Test orbital filename parsing."""
-        from aiida_abacus.group.orb_group import parse_orb_filename
-
         # Test standard format
         result = parse_orb_filename("Si_gga_7au_100Ry_2s2p1d.orb")
         assert result["element"] == "Si"

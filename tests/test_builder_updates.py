@@ -5,6 +5,7 @@ Unit tests to verify that InputGenerator methods actually update builder content
 from pathlib import Path
 
 import pytest
+
 from aiida_abacus.protocols.generator import AbacusBaseInputGenerator, PresetConfig
 
 
@@ -49,6 +50,7 @@ class TestBuilderCreation:
         assert builder.abacus.code is not None
         assert builder.abacus.parameters is not None
         assert builder.abacus.metadata is not None
+        assert builder.pseudo_family.value == "apns-efficiency-test"
 
     def test_builder_parameters_structure(self, builder):
         """Test that builder parameters have expected structure and values"""

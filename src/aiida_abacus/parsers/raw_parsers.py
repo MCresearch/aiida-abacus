@@ -155,7 +155,7 @@ class AbacusRawParser(BaseRawParser):
         # NOTE: Abacus only report the kpoint on the head MPI process!
         # TODO: Raise a PR to the developers to include all kpoints in the log file.
         if nkpts != nkthis_procs:
-            logger.wanning("The number of kpoint is (), but only () on this proc")
+            logger.warning("The number of kpoint is (), but only () on this proc")
         assert ntot % nspins == 0
         kpt_cart = np.zeros((nkpts, 3))
         # Process all blocks
@@ -193,6 +193,8 @@ class AbacusRawParser(BaseRawParser):
         Check if the calculation completed successfully by looking for 'Total  Time'
         at the end of the running log file and compose the run status dictionary.
 
+        Also detects convergence status from the running log.
+
         :returns: Dictionary with completion status information
         """
         run_status = {"completed": False, "completion_marker_found": False, "termination_marker": None}
@@ -219,10 +221,15 @@ class AbacusRawParser(BaseRawParser):
                     run_status["completion_marker_found"] = True
                     run_status["termination_marker"] = completion_marker
                     logger.info(f"Found completion marker '{completion_marker}' in line: {line_stripped}")
-                    return run_status
+                    break
 
             # If no completion marker found, calculation is incomplete
-            logger.warning(f"Completion marker '{completion_marker}' not found in log file")
+            if not run_status["completed"]:
+                logger.warning(f"Completion marker '{completion_marker}' not found in log file")
+
+            # Detect convergence status from the full log
+            notifications = self.parse_notifications()
+            run_status["notifications"] = notifications
 
         except Exception as e:
             logger.error(f"Error checking calculation completion: {e!s}")
@@ -230,6 +237,72 @@ class AbacusRawParser(BaseRawParser):
             run_status["termination_marker"] = f"error: {e!s}"
 
         return run_status
+
+    def parse_notifications(self) -> list:
+        """
+        Scan the running log for convergence and error notifications.
+
+        Detects ABACUS-specific patterns:
+        - SCF convergence:
+          current branches: "!!SCF IS NOT CONVERGED!!" / "#SCF IS CONVERGED#"
+          LTS branches: "!! convergence has not been achieved @_@" / "charge density convergence is achieved"
+        - Ionic convergence: "Relaxation is (not) converged"
+        - Geometry convergence: "Geometry relaxation is not converged"
+        - Mixed state: "Relaxation is converged, but the SCF is unconverged"
+
+        Preserve the full encounter order so callers can reason about the final state
+        of a relaxation instead of just the presence of any earlier warning.
+
+        :returns: List of notification dicts with 'name' and 'message' keys
+        """
+        notifications = []
+
+        # Patterns to search for in the running log
+        patterns = {
+            "scf_not_converged": re.compile(r"!!SCF IS NOT CONVERGED!!|!!\s*convergence has not been achieved\s*@_@"),
+            "scf_converged": re.compile(r"#SCF IS CONVERGED#|charge density convergence is achieved"),
+            "ionic_not_converged": re.compile(r"Relaxation is not converged"),
+            "ionic_converged": re.compile(r"Relaxation is converged!"),
+            "geometry_not_converged": re.compile(r"Geometry relaxation is not converged"),
+            "relax_scf_not_converged": re.compile(r"Relaxation is converged, but the SCF is unconverged"),
+        }
+
+        for line in self.lines:
+            for name, pattern in patterns.items():
+                if pattern.search(line):
+                    notifications.append({"name": name, "message": line.strip()})
+
+        return notifications
+
+    def parse_runtime_warnings(self) -> list:
+        """
+        Scan the running log for warning-like messages not mirrored into ``warning.log``.
+
+        ABACUS commonly emits numerical quality warnings as ``Notice: ...`` lines in
+        ``running_*.log``. Keep these in a separate list so they can be merged into the
+        parsed misc output without conflating them with convergence notifications.
+        """
+        patterns = (
+            re.compile(r"^\s*Notice:\s*(.+)$"),
+            re.compile(r"^\s*Warning:\s*(.+)$", re.IGNORECASE),
+        )
+        warnings = []
+        seen = set()
+
+        for line in self.lines:
+            stripped = line.strip()
+            for pattern in patterns:
+                match = pattern.match(stripped)
+                if match is None:
+                    continue
+                message = match.group(1).strip()
+                key = ("running_log", message)
+                if key not in seen:
+                    seen.add(key)
+                    warnings.append({"source": "running_log", "message": message})
+                break
+
+        return warnings
 
 
 class BlockParser:
@@ -273,13 +346,13 @@ class BlockParser:
             block_name = m.groups()
             block_tokens = []
             j = i + self.offset
-            while j <= len(self.lines):
+            while j < len(self.lines):
                 this_line = self.lines[j].strip()
                 # Break with empty line
                 if not this_line:
                     break
                 # Break with predefined sequence such as ---- or +++++
-                if any(key in line for key in self.end_characters):
+                if any(key in this_line for key in self.end_characters):
                     break
                 tokens = self.lines[j].strip().split()
                 block_tokens.append(tokens)
@@ -445,3 +518,27 @@ class StruParser(BaseRawParser):
                 blocks[current_block].append(line)
         self.blocks = blocks
         return blocks
+
+
+class WarningLogParser(BaseRawParser):
+    """
+    Parse ABACUS warning.log file.
+
+    ABACUS writes warnings via WARNING() and WARNING_QUIT() functions.
+    Format: <file>  warning : <description>
+    """
+
+    WARNING_PATTERN = re.compile(r"^\s*(\S+)\s+warning\s*:\s*(.+)$", re.IGNORECASE)
+
+    def parse(self) -> list:
+        """
+        Parse warning.log and return a list of notification dicts.
+
+        :returns: List of dicts with 'source', 'message' keys
+        """
+        notifications = []
+        for line in self.lines:
+            match = self.WARNING_PATTERN.match(line.strip())
+            if match:
+                notifications.append({"source": match.group(1), "message": match.group(2).strip()})
+        return notifications

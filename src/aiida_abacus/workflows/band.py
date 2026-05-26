@@ -2,6 +2,7 @@
 Workflow for performing band structure calculation
 """
 
+import importlib
 import pathlib
 
 import numpy as np
@@ -9,12 +10,22 @@ from aiida import orm
 from aiida.common.extendeddicts import AttributeDict
 from aiida.common.lang import type_check
 from aiida.engine import ToContext, WorkChain, calcfunction, if_
+from aiida.tools import get_explicit_kpoints_path
 
 from aiida_abacus.common import ProtocolMixin, RelaxType, prepare_process_inputs
 from aiida_abacus.common.opthold import BandOptions
 
 from .base import AbacusBaseWorkChain
 from .relax import AbacusRelaxWorkChain
+
+
+def _get_sumo_kpath():
+    """Import the optional Sumo k-path helper on demand."""
+    try:
+        module = importlib.import_module("aiida_abacus.common.sumo_kpath")
+    except ImportError as exc:
+        raise ImportError("Sumo is not installed, please install it to use this feature.") from exc
+    return module.kpath_from_sumo_v2
 
 
 class AbacusBandWorkChain(ProtocolMixin, WorkChain):
@@ -78,6 +89,10 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
+        spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
+        spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
+        spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
+        spec.exit_code(604, "ERROR_RELAX_PROCESS_FAILED", message="The relaxation calculation failed.")
 
     @classmethod
     def get_protocol_filepath(cls, file_alias: str | None = None) -> pathlib.Path:
@@ -112,7 +127,10 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         )
         builder = cls.get_builder()
         builder.base = base
-        builder.band_settings = inputs.get("band_settings", {})
+        builder.structure = structure
+        builder.band_settings = orm.Dict(dict=inputs.get("band_settings", {}))
+
+        type_check(relax_type, RelaxType)
 
         # Configure relax port if relaxation is requested
         if relax_type != RelaxType.NONE:
@@ -128,8 +146,6 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             builder.relax = relax
 
         return builder
-
-        type_check(relax_type, RelaxType)
 
     def setup(self):
         """Setup the workchain"""
@@ -159,7 +175,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
 
     def verify_relax(self):
         """Verify the relax workflow"""
-        if self.ctx.relax_workchain.is_excepted:
+        if not self.ctx.relax_workchain.is_finished_ok:
             return self.exit_codes.ERROR_RELAX_PROCESS_FAILED
         # Set the current structure to the relaxed structure
         self.ctx.structure = self.ctx.relax_workchain.outputs.structure
@@ -182,7 +198,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                     {
                         "reference_distance": self.inputs.band_settings["band_kpoints_distance"],
                         "symprec": self.inputs.band_settings["symprec"],
-                        **self.inputs.band_settings["additional_band_analysis_parameters"],
+                        **self.inputs.band_settings.get("additional_band_analysis_parameters", {}),
                     }
                 ),
                 "metadata": {"call_link_label": "seekpath"},
@@ -190,23 +206,18 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             func = seekpath_structure_analysis
         else:
             # Using sumo interface
-            try:
-                from aiida_abacus.common.sumo_kpath import kpath_from_sumo_v2
-            except ImportError:
-                raise ImportError("Sumo is not installed, please install it to use this feature.")
-
             inputs = {
                 "band_settings": orm.Dict(
                     {
                         "line_density": self.inputs.band_settings["line_density"],
                         "symprec": self.inputs.band_settings["symprec"],
                         "mode": mode,
-                        **self.inputs.band_settings["additional_band_analysis_parameters"],
+                        **self.inputs.band_settings.get("additional_band_analysis_parameters", {}),
                     }
                 ),
                 "metadata": {"call_link_label": "sumo_kpath"},
             }
-            func = kpath_from_sumo_v2
+            func = _get_sumo_kpath()
 
         # Run the kpath generation and replace the current structure as the primitive structure
         kpath_results = func(self.ctx.structure, **inputs)
@@ -243,7 +254,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         return ToContext(scf_workchain=running)
 
     def verify_scf(self):
-        if self.ctx.scf_workchain.is_excepted:
+        if not self.ctx.scf_workchain.is_finished_ok:
             return self.exit_codes.ERROR_SCF_PROCESS_FAILED
         self.ctx.restart_folder = self.ctx.scf_workchain.outputs.remote_folder
 
@@ -258,7 +269,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         # Configure the restart folder
         inputs.abacus.restart_folder = self.ctx.restart_folder
         running = {}
-        if self.ctx.band_settings.get("run_band", True):
+        if self.ctx.band_settings.get("run_bands", True):
             # Set the kpoints to be that of the band path
             inputs.kpoints = self.ctx.kpoints_band
             if "kpoints_distance" in inputs:
@@ -321,8 +332,6 @@ def seekpath_structure_analysis(structure, band_settings):
 
     Note that exact parameters that are available and their defaults will depend on your Seekpath version.
     """
-    from aiida.tools import get_explicit_kpoints_path
-
     # All keyword arugments should be `Data` node instances of base type and so should have the `.value` attribute
     return get_explicit_kpoints_path(structure, **band_settings.get_dict())
 

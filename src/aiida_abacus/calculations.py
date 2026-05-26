@@ -192,6 +192,26 @@ class AbacusCalculation(CalcJob):
             "ERROR_CALCULATION_INCOMPLETE",
             message="Calculation did not complete successfully - 'Total Time' not found at end of running log.",
         )
+        spec.exit_code(
+            302,
+            "ERROR_ELECTRONIC_NOT_CONVERGED",
+            message="SCF did not reach self-consistency.",
+        )
+        spec.exit_code(
+            303,
+            "ERROR_IONIC_NOT_CONVERGED",
+            message="Ionic relaxation did not converge within the maximum number of steps.",
+        )
+        spec.exit_code(
+            410,
+            "ERROR_SCF_NOT_CONVERGED",
+            message="SCF calculation did not converge within the specified electronic minimization steps.",
+        )
+        spec.exit_code(
+            501,
+            "ERROR_IONIC_CONVERGED_BUT_SCF_FAILED",
+            message="Ionic minimization converged but final SCF calculation did not converge.",
+        )
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
         spec.default_output_node = "misc"
 
@@ -569,8 +589,7 @@ class AbacusCalculation(CalcJob):
         if velocity_list is not None:
             if len(velocity_list) != len(coordinates):
                 raise exceptions.InputValidationError(
-                    f"Velocity list length ({len(velocity_list)}) does not match "
-                    f"number of atoms ({len(coordinates)})"
+                    f"Velocity list length ({len(velocity_list)}) does not match number of atoms ({len(coordinates)})"
                 )
             # Validate each velocity has 3 components
             for i, vel in enumerate(velocity_list):

@@ -9,11 +9,13 @@ from aiida import orm
 from aiida.common import AttributeDict, exceptions
 from aiida.common.exceptions import NotExistent
 from aiida.common.lang import type_check
-from aiida.engine import calcfunction, while_
+from aiida.engine import ProcessHandlerReport, calcfunction, process_handler, while_
 from aiida.engine.processes.workchains.restart import BaseRestartWorkChain
+from aiida.orm import KpointsData
 from aiida.orm.nodes.data.base import to_aiida_type
 from aiida.plugins import GroupFactory
 from aiida_pseudo.groups.family import PseudoPotentialFamily
+from numpy import linalg
 
 from aiida_abacus.calculations import AbacusCalculation
 from aiida_abacus.common import (
@@ -180,12 +182,15 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         self.ctx.inputs = AttributeDict(self.exposed_inputs(AbacusCalculation, "abacus"))
 
         self.ctx.inputs.parameters = self.ctx.inputs.parameters.get_dict()
+        if "pseudo_family" in self.inputs and "pseudos" in self.ctx.inputs and self.ctx.inputs.pseudos:
+            self.report("Specify either `pseudo_family` or `abacus.pseudos`, but not both.")
+            return self.exit_codes.ERROR_INVALID_INPUT_PSEUDO_POTENTIALS
+
         if "pseudo_family" in self.inputs:
             # NOTE: cutoff_rho is not used here
-            pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
+            self.ctx.inputs.pseudos, cutoff_wfc, _ = get_pseudos_cutoff_via_family(
                 self.inputs.abacus.structure, self.inputs.pseudo_family.value
             )
-            self.ctx.inputs.pseudos = pseudos
             # Set the default ecutwfc if not specified
             if self.ctx.inputs.parameters["input"].get("ecutwfc", None) is None:
                 self.ctx.inputs.parameters["input"]["ecutwfc"] = cutoff_wfc
@@ -194,10 +199,75 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         # calculation_type = self.ctx.inputs.parameters['input'].get('type', 'scf')
 
         self.ctx.inputs.settings = self.ctx.inputs.settings.get_dict() if "settings" in self.ctx.inputs else {}
+        self.ctx.last_calc_was_unfinished = False
+        self.ctx.electronic_conv_attempts = 0
+        self.ctx.ionic_restart_attempted = False
 
     def prepare_process(self):
         """Prepare the inputs for the next calculation."""
         pass
+
+    @process_handler(priority=900, exit_codes=AbacusCalculation.exit_codes.ERROR_CALCULATION_INCOMPLETE)
+    def handler_unfinished_calc(self, calculation):
+        """Retry one incomplete calculation before aborting."""
+        if self.ctx.last_calc_was_unfinished:
+            self.report_error_handled(
+                calculation, "calculation ended incomplete for the second consecutive time; aborting."
+            )
+            return ProcessHandlerReport(
+                True,
+                self.exit_codes.ERROR_UNRECOVERABLE_FAILURE,
+            )
+
+        self.ctx.last_calc_was_unfinished = True
+        self.report_error_handled(
+            calculation, "calculation did not finish cleanly; retrying once with the same inputs."
+        )
+        return ProcessHandlerReport(True)
+
+    @process_handler(priority=800, exit_codes=AbacusCalculation.exit_codes.ERROR_ELECTRONIC_NOT_CONVERGED)
+    def handler_electronic_convergence(self, calculation):
+        """Adjust SCF settings through a fixed retry sequence."""
+        self.ctx.last_calc_was_unfinished = False
+
+        parameters = self.ctx.inputs.parameters.setdefault("input", {})
+        self.ctx.electronic_conv_attempts += 1
+
+        if parameters.get("scf_nmax", 100) < 150:
+            parameters["scf_nmax"] = 150
+            self.report_error_handled(calculation, "increased `scf_nmax` to 150 and will retry.")
+            return ProcessHandlerReport(True)
+
+        mixing_sequence = [0.4, 0.2, 0.1]
+        current_beta = float(parameters.get("mixing_beta", 0.7))
+
+        for candidate in mixing_sequence:
+            if current_beta > candidate:
+                parameters["mixing_beta"] = candidate
+                self.report_error_handled(calculation, f"reduced `mixing_beta` to {candidate} and will retry.")
+                return ProcessHandlerReport(True)
+
+        self.report_error_handled(calculation, "electronic convergence retries exhausted; aborting.")
+        return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+    @process_handler(priority=700, exit_codes=AbacusCalculation.exit_codes.ERROR_IONIC_NOT_CONVERGED)
+    def handler_ionic_convergence(self, calculation):
+        """Restart ionic calculations from the latest parsed output structure if available."""
+        self.ctx.last_calc_was_unfinished = False
+
+        if self.ctx.ionic_restart_attempted:
+            self.report_error_handled(calculation, "ionic restart already attempted once; aborting.")
+            return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+        try:
+            self.ctx.inputs.structure = calculation.outputs.structure
+        except (AttributeError, KeyError):
+            self.report_error_handled(calculation, "no output structure available for ionic restart; aborting.")
+            return ProcessHandlerReport(True, self.exit_codes.ERROR_KNOWN_UNRECOVERABLE_FAILURE)
+
+        self.ctx.ionic_restart_attempted = True
+        self.report_error_handled(calculation, "restarting from the latest output structure.")
+        return ProcessHandlerReport(True)
 
     @classmethod
     def get_builder_from_protocol(
@@ -252,7 +322,7 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
 
         natoms = len(structure.sites)
 
-        pseudos, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
+        _, cutoff_wfc, _cutoff_rho = get_pseudos_cutoff_via_family(structure, pseudo_family_name)
         # Update the parameters based on the protocol inputs
         parameters = inputs["abacus"]["parameters"]
         parameters["input"]["scf_thr"] = natoms * meta_parameters["conv_thr_per_atom"]
@@ -267,6 +337,10 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             # Set the initial magnetization
             pass
 
+        pseudos = overrides.get("abacus", {}).get("pseudos", {}) if overrides else {}
+        if pseudos:
+            raise ValueError("Specify either `pseudo_family` or `overrides['abacus']['pseudos']`, but not both.")
+
         # If overrides are provided, they are considered absolute
         if overrides:
             parameter_overrides = overrides.get("abacus", {}).get("parameters", {})
@@ -276,9 +350,6 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             # if parameters.get('stru', {}).get('tot_magnetization') is not None:
             #     parameters.setdefault('stru', {}).pop('starting_magnetization', None)
 
-            pseudos_overrides = overrides.get("abacus", {}).get("pseudos", {})
-            pseudos = recursive_merge(pseudos, pseudos_overrides)
-
         metadata = inputs["abacus"]["metadata"]
 
         if options:
@@ -287,12 +358,15 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
         # pylint: disable=no-member
         builder = cls.get_builder()
         builder.abacus["code"] = code
-        builder.abacus["pseudos"] = pseudos
+        if pseudos:
+            builder.abacus["pseudos"] = pseudos
         builder.abacus["structure"] = structure
         builder.abacus["parameters"] = orm.Dict(parameters)
         builder.abacus["metadata"] = metadata
+        builder.pseudo_family = orm.Str(pseudo_family_name)
         if "settings" in inputs["abacus"]:
             builder.abacus["settings"] = orm.Dict(inputs["abacus"]["settings"])
+        builder.pseudo_family = orm.Str(pseudo_family_name)
         builder.clean_workdir = orm.Bool(inputs["clean_workdir"])
         if "kpoints" in inputs:
             builder.kpoints = inputs["kpoints"]
@@ -317,9 +391,6 @@ def create_kpoints_from_distance(structure, distance, force_parity):
     :param force_parity: a Bool to specify whether the generated mesh should maintain parity
     :returns: a KpointsData with the generated mesh
     """
-    from aiida.orm import KpointsData
-    from numpy import linalg
-
     epsilon = 1e-5
 
     kpoints = KpointsData()
@@ -368,7 +439,10 @@ def get_pseudos_cutoff_via_family(structure: orm.StructureData, pseudo_family_na
     try:
         pseudo_family = orm.QueryBuilder().append(AtomicOrbitalFamily, filters={"label": pseudo_family_name}).one()[0]
         pseudos = pseudo_family.get_pseudos(structure=structure)
-        cutoff_wfc = next(iter(pseudos.values())).cut_off_energy  # Use the first pseudo's cut off energy
+        # Safely get cut_off_energy from the first pseudo if available
+        first_pseudo = next(iter(pseudos.values()))
+        if hasattr(first_pseudo, "cut_off_energy") and first_pseudo.cut_off_energy is not None:
+            cutoff_wfc = first_pseudo.cut_off_energy  # Use the first pseudo's cut off energy
     except exceptions.NotExistent:
         pass
     if pseudo_family is not None:

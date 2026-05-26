@@ -195,17 +195,16 @@ def apply_relax_settings_to_abacus_input(
     """
     relax_settings = {} if relax_settings is None else relax_settings
     # Get relax_type from settings first, then use parameter fallback
-    if relax_settings is not None:
-        relax_type_from_settings = relax_settings.get("relax_type")
-        if relax_type_from_settings is not None:
-            # Convert string to RelaxType if needed
-            if isinstance(relax_type_from_settings, str):
-                try:
-                    relax_type = RelaxType(relax_type_from_settings)
-                except ValueError:
-                    raise ValueError(f"Invalid relax_type: {relax_type_from_settings}")
-            else:
-                relax_type = relax_type_from_settings
+    relax_type_from_settings = relax_settings.get("relax_type")
+    if relax_type_from_settings is not None:
+        # Convert string to RelaxType if needed
+        if isinstance(relax_type_from_settings, str):
+            try:
+                relax_type = RelaxType(relax_type_from_settings)
+            except ValueError:
+                raise ValueError(f"Invalid relax_type: {relax_type_from_settings}")
+        else:
+            relax_type = relax_type_from_settings
 
     # Apply relax_type-specific settings
     if relax_type is not None:

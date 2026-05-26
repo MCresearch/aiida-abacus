@@ -8,17 +8,24 @@ from pathlib import Path
 
 import pytest
 from aiida import orm
+from aiida.common import exceptions
+from aiida.common.exceptions import InputValidationError
 from aiida.common.extendeddicts import AttributeDict
 from aiida.engine.utils import instantiate_process
 from aiida.manage.manager import get_manager
+from ase import Atoms
+from ase.constraints import FixAtoms
+
 from aiida_abacus.calculations import AbacusCalculation
+from aiida_abacus.parsers.raw_parsers import StruParser
+from aiida_abacus.utils import serialize_dynamics
 
 
 class TestInputFileGeneration:
     """Test generation of ABACUS input files (INPUT, KPT, STRU)."""
 
     @pytest.fixture
-    def calc_with_inputs(self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints):
+    def calc_with_inputs(self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints):
         """Create an AbacusCalculation instance with all necessary inputs."""
         manager = get_manager()
         runner = manager.get_runner()
@@ -26,7 +33,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
 
         # Basic parameters for plane wave calculation
@@ -110,7 +117,7 @@ class TestInputFileGeneration:
         assert "Cartesian" in content
 
     def test_velocity_in_stru_file(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test velocity values are written correctly to STRU file."""
         manager = get_manager()
@@ -122,7 +129,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
         inputs.dynamics = orm.Dict({"v": velocities})
@@ -147,7 +154,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {"v": [[1.0, 1.0, 1.0]] * num_atoms}})
         inputs.metadata = AttributeDict({"options": {"resources": {"num_machines": 1, "num_mpiprocs_per_machine": 1}}})
@@ -165,10 +172,9 @@ class TestInputFileGeneration:
         assert "1.0" in lines[0]
 
     def test_velocity_validation_wrong_length(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when velocity list length doesn't match atoms."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -176,7 +182,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
         inputs.dynamics = orm.Dict({"v": [[0.1, 0.0, 0.0]]})  # Only 1 velocity
@@ -188,10 +194,9 @@ class TestInputFileGeneration:
             process.prepare_for_submission(sandbox_folder)
 
     def test_velocity_multiple_aliases(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when multiple velocity aliases in dynamics port."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -200,7 +205,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {}})
         inputs.dynamics = orm.Dict({"v": [[0.1, 0.0, 0.0]] * num_atoms, "vel": [[0.2, 0.0, 0.0]] * num_atoms})
@@ -215,7 +220,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         v_list = [[0.1, 0.0, 0.0]] * num_atoms
         vel_list = [[0.2, 0.0, 0.0]] * num_atoms
@@ -228,10 +233,9 @@ class TestInputFileGeneration:
             process.prepare_for_submission(sandbox_folder)
 
     def test_magmom_multiple_aliases(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when multiple magmom aliases in parameters."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -240,7 +244,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         stru_dict = {"mag": [[0.0, 0.0, 1.0]] * num_atoms, "magmom": [[0.0, 0.0, -1.0]] * num_atoms}
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": stru_dict})
@@ -251,10 +255,9 @@ class TestInputFileGeneration:
             process.prepare_for_submission(sandbox_folder)
 
     def test_velocity_conflict_detection(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints, sandbox_folder
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints, sandbox_folder
     ):
         """Test error when velocity specified in both dynamics and parameters."""
-        from aiida.common import exceptions
 
         manager = get_manager()
         runner = manager.get_runner()
@@ -264,7 +267,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
         inputs.parameters = orm.Dict({"input": {"basis_type": "pw"}, "stru": {"v": [[0.1, 0.0, 0.0]] * num_atoms}})
         inputs.dynamics = orm.Dict({"v": [[0.2, 0.0, 0.0]] * num_atoms})
@@ -309,7 +312,7 @@ class TestInputFileGeneration:
         for copy in pseudo_copies:
             assert copy[2].startswith("./pseudo/")
 
-    def test_lattice_constant_handling(self, abacus_code, si_structure, pseudo_familty, sandbox_folder):
+    def test_lattice_constant_handling(self, abacus_code, si_structure, pseudo_family, sandbox_folder):
         """Test handling of custom lattice constant in STRU file."""
         manager = get_manager()
         runner = manager.get_runner()
@@ -317,7 +320,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = orm.KpointsData()
         inputs.kpoints.set_kpoints_mesh([2, 2, 2])
 
@@ -338,7 +341,7 @@ class TestInputFileGeneration:
         assert "LATTICE_CONSTANT" in content
         assert "2.0" in content
 
-    def test_magnetic_moments_handling(self, abacus_code, si_structure, pseudo_familty, sandbox_folder):
+    def test_magnetic_moments_handling(self, abacus_code, si_structure, pseudo_family, sandbox_folder):
         """Test handling of magnetic moments in STRU file."""
         manager = get_manager()
         runner = manager.get_runner()
@@ -346,7 +349,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = orm.KpointsData()
         inputs.kpoints.set_kpoints_mesh([2, 2, 2])
 
@@ -401,7 +404,7 @@ class TestInputFileGeneration:
             remote_copy = calcinfo.remote_copy_list[0]
             assert len(remote_copy) == 3
 
-    def test_kpoints_explicit_generation(self, abacus_code, si_structure, pseudo_familty, sandbox_folder):
+    def test_kpoints_explicit_generation(self, abacus_code, si_structure, pseudo_family, sandbox_folder):
         """Test generation of KPT file for explicit k-points."""
         kpoints = orm.KpointsData()
         kpoints.set_cell_from_structure(si_structure)
@@ -413,7 +416,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = kpoints
         inputs.parameters = orm.Dict(
             {
@@ -471,9 +474,6 @@ class TestInputFileGeneration:
             if len(parts) >= 7:
                 assert "m" in parts[3:7]
 
-        # Use the raw STRU parser to read back and parse the STRU file
-        from aiida_abacus.parsers.raw_parsers import StruParser
-
         stru_parser = StruParser(stru_path)
         lattice_vectors, positions, species = stru_parser.parse()
 
@@ -504,20 +504,16 @@ class TestInputFileGeneration:
         assert "m 1 1 1" in stru_content
 
     def test_dynamics_port_with_ase_constraints(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints
     ):
         """Test that ASE constraints via dynamics port are correctly converted to STRU 'm' flags."""
-        from aiida_abacus.utils import serialize_dynamics
-        from ase import Atoms
-        from ase.constraints import FixAtoms
-
         manager = get_manager()
         runner = manager.get_runner()
 
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
 
         # Basic parameters WITHOUT 'm' flags
@@ -557,18 +553,16 @@ class TestInputFileGeneration:
         assert "m 1 1 1" in stru_content  # Second atom movable
 
     def test_dynamics_port_conflicts_with_parameters_raises_error(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints
     ):
         """Test that specifying 'm' in both dynamics and parameters raises an error."""
-        from aiida.common.exceptions import InputValidationError
-
         manager = get_manager()
         runner = manager.get_runner()
 
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
 
         # Parameters with 'm' specified
@@ -591,7 +585,7 @@ class TestInputFileGeneration:
             process.generate_structure(si_structure, inputs.pseudos, parameters["stru"])
 
     def test_legacy_parameters_still_works(
-        self, aiida_profile_clean, abacus_code, si_structure, pseudo_familty, abacus_kpoints
+        self, aiida_profile_clean, abacus_code, si_structure, pseudo_family, abacus_kpoints
     ):
         """Test that legacy parameters['stru']['m'] approach still works (backwards compatibility)."""
         manager = get_manager()
@@ -600,7 +594,7 @@ class TestInputFileGeneration:
         inputs = AttributeDict()
         inputs.code = abacus_code
         inputs.structure = si_structure
-        inputs.pseudos = pseudo_familty.get_pseudos(structure=si_structure)
+        inputs.pseudos = pseudo_family.get_pseudos(structure=si_structure)
         inputs.kpoints = abacus_kpoints
 
         # Legacy approach: specify 'm' in parameters

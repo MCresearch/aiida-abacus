@@ -78,9 +78,9 @@ class AtomicOrbitalCollection(orm.Group):
                 # This is the element obtained from the UPF file
                 upf_element = orb_node.base.attributes.get("element")
                 orb_info["orbital_type"] = orb_type
-                assert (
-                    element.lower() == upf_element.lower()
-                ), f"Orbital element '{upf_element}' does not match pseudopotential element '{element}'"
+                assert element.lower() == upf_element.lower(), (
+                    f"Orbital element '{upf_element}' does not match pseudopotential element '{element}'"
+                )
                 # Check if new nodes
                 if not orb_node.is_stored:
                     orb_node.base.attributes.set_many(orb_info)
@@ -291,7 +291,7 @@ class AtomicOrbitalCollection(orm.Group):
             node = q.one()[0]
         except MultipleObjectsError as _:
             raise MultipleObjectsError(
-                f"More than one orbital found for element={element}, " f"orbital_type={orbital_type}, rcut={rcut}"
+                f"More than one orbital found for element={element}, orbital_type={orbital_type}, rcut={rcut}"
             )
         except NotExistent as _:
             # Provide more detailed error message
