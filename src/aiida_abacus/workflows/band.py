@@ -283,20 +283,23 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 del inputs["kpoints"]
             # Use spacing to define DOS kpoints
             inputs.kpoints_distance = self.ctx.band_settings["dos_kpoints_distance"]
+            inputs.abacus.settings = inputs.abacus.settings.get_dict() if "settings" in inputs.abacus else {}
+            inputs.abacus.settings["include_dos"] = True
             # Auto-set out_dos and configure file retrieval
             if "settings" in inputs.abacus and not isinstance(inputs.abacus.settings, dict):
                 inputs.abacus.settings = inputs.abacus.settings.get_dict()
             elif "settings" not in inputs.abacus:
                 inputs.abacus.settings = {}
             additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
-            basis_type = str(inputs.abacus.parameters["input"].get("basis_type", "")).lower()
-            if basis_type == "lcao":
-                inputs.abacus.parameters["input"]["out_dos"] = 2
-                additional_retrieve.append("DOS1_smearing.dat")
-                additional_retrieve.append("PDOS")
-            else:
+            nspin = inputs.abacus.parameters["input"].get("nspin", 1)
+            outdos = inputs.abacus.parameters["input"].get("out_dos", None)
+            if outdos is None:
                 inputs.abacus.parameters["input"]["out_dos"] = 1
-                additional_retrieve.append("DOS1_smearing.dat")
+            if nspin == 1:
+                tdos_file = ["DOS1_smearing.dat"]
+            else:
+                tdos_file = ["DOS1_smearing.dat", "DOS2_smearing.dat"]
+            additional_retrieve.extend(tdos_file)
             inputs.abacus.settings["additional_retrieve_list"] = additional_retrieve
             dos_input = prepare_process_inputs(AbacusBaseWorkChain, inputs)
             running["dos_workchain"] = self.submit(AbacusBaseWorkChain, **dos_input)
