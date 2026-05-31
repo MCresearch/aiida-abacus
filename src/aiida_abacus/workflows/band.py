@@ -89,6 +89,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
+        spec.output("dos", valid_type=orm.ArrayData, help="Output density of states data.")
         spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
         spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
         spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
@@ -329,6 +330,8 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             if not dos_workchain.is_finished_ok:
                 self.report(f"DOS calculation finished with error, exit_status: {dos_workchain.exit_status}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_DOS_FAILED
+            else:
+                self.out("dos", dos_workchain.outputs.dos)
 
         return exit_code
 
