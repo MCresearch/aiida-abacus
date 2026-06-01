@@ -284,13 +284,12 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 del inputs["kpoints"]
             # Use spacing to define DOS kpoints
             inputs.kpoints_distance = self.ctx.band_settings["dos_kpoints_distance"]
-            inputs.abacus.settings = inputs.abacus.settings.get_dict() if "settings" in inputs.abacus else {}
-            inputs.abacus.settings["include_dos"] = True
-            # Auto-set out_dos and configure file retrieval
-            if "settings" in inputs.abacus and not isinstance(inputs.abacus.settings, dict):
-                inputs.abacus.settings = inputs.abacus.settings.get_dict()
-            elif "settings" not in inputs.abacus:
+            settings = inputs.abacus.get("settings")
+            if isinstance(settings, orm.Dict):
+                inputs.abacus.settings = settings.get_dict()
+            elif not isinstance(settings, dict):
                 inputs.abacus.settings = {}
+            inputs.abacus.settings["include_dos"] = True
             additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
             nspin = inputs.abacus.parameters["input"].get("nspin", 1)
             outdos = inputs.abacus.parameters["input"].get("out_dos", None)
