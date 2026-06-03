@@ -262,7 +262,7 @@ class AbacusRawParser(BaseRawParser):
             "scf_not_converged": re.compile(r"!!SCF IS NOT CONVERGED!!|!!\s*convergence has not been achieved\s*@_@"),
             "scf_converged": re.compile(r"#SCF IS CONVERGED#|charge density convergence is achieved"),
             "ionic_not_converged": re.compile(r"(?:Lattice )?[Rr]elaxation is not converged(?: yet)?"),
-            "ionic_converged": re.compile(r"Relaxation is converged!"),
+            "ionic_converged": re.compile(r"(?:Lattice )?[Rr]elaxation is converged!"),
             "geometry_not_converged": re.compile(r"Geometry relaxation is not converged"),
             "relax_scf_not_converged": re.compile(r"Relaxation is converged, but the SCF is unconverged"),
         }
