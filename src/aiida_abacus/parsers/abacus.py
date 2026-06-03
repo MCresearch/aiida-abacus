@@ -78,6 +78,9 @@ class AbacusParser(Parser):
         # Check if the files are retrieved
         missing = []
         for name in expected_files:
+            # Skip glob patterns — they cannot be looked up by exact name via get_object
+            if any(c in name for c in "*?["):
+                continue
             try:
                 output_folder.get_object(name)
             except FileNotFoundError:
