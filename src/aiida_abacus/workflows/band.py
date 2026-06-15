@@ -82,7 +82,12 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             cls.run_bands_dos,
             cls.verify_bands_dos,
         )
-        spec.output("band_structure", valid_type=orm.BandsData, help="Output band structure data.")
+        spec.output(
+            "band_structure",
+            valid_type=orm.BandsData,
+            required=False,
+            help="Output band structure data. Only available when run_bands is True.",
+        )
         spec.output(
             "primitive_structure",
             valid_type=orm.StructureData,
