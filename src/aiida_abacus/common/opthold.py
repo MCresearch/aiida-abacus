@@ -81,6 +81,10 @@ class SettingsOptions(OptionContainer):
         description="Flag for including the bands in the output",
         default=False,
     )
+    include_dos: bool = Field(
+        description="Flag for including the DOS in the output",
+        default=False,
+    )
     include_internal_parameters: bool = Field(
         description="Flag for including the internal parameters in the output",
         default=False,

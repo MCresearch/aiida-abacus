@@ -176,6 +176,13 @@ class AbacusCalculation(CalcJob):
         )
 
         spec.output(
+            "dos",
+            valid_type=orm.ArrayData,
+            help="Density of states",
+            required=False,
+        )
+
+        spec.output(
             "trajectory",
             valid_type=orm.TrajectoryData,
             help="Molecular dynamics trajectory data",

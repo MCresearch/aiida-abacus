@@ -94,6 +94,7 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             help="Primitive structure for which the band structure is calculated for.",
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
+        spec.output("dos", valid_type=orm.ArrayData, required=False, help="Output density of states data.")
         spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
         spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
         spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
@@ -288,6 +289,20 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 del inputs["kpoints"]
             # Use spacing to define DOS kpoints
             inputs.kpoints_distance = self.ctx.band_settings["dos_kpoints_distance"]
+            _settings = inputs.abacus.get("settings")
+            inputs.abacus.settings = _settings.get_dict() if isinstance(_settings, orm.Dict) else _settings or {}
+            inputs.abacus.settings["include_dos"] = True
+            additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
+            nspin = inputs.abacus.parameters["input"].get("nspin", 1)
+            outdos = inputs.abacus.parameters["input"].get("out_dos", None)
+            if outdos is None:
+                inputs.abacus.parameters["input"]["out_dos"] = 1
+            if nspin == 1:
+                tdos_file = ["DOS1_smearing.dat"]
+            else:
+                tdos_file = ["DOS1_smearing.dat", "DOS2_smearing.dat"]
+            additional_retrieve.extend(tdos_file)
+            inputs.abacus.settings["additional_retrieve_list"] = additional_retrieve
             dos_input = prepare_process_inputs(AbacusBaseWorkChain, inputs)
             running["dos_workchain"] = self.submit(AbacusBaseWorkChain, **dos_input)
 
@@ -316,6 +331,8 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             if not dos_workchain.is_finished_ok:
                 self.report(f"DOS calculation finished with error, exit_status: {dos_workchain.exit_status}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_DOS_FAILED
+            else:
+                self.out("dos", dos_workchain.outputs.dos)
 
         return exit_code
 

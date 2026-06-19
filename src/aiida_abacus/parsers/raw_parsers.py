@@ -392,6 +392,59 @@ class BandsParser(BaseRawParser):
         return kdist, eigenvalues
 
 
+class DosParser:
+    """Parser to process DOS1_smearing.dat and DOS2_smearing.dat files"""
+
+    def __init__(self, dos1_content=None, dos2_content=None):
+        self.dos1_content = dos1_content
+        self.dos2_content = dos2_content
+
+    @staticmethod
+    def _parse_single(content):
+        energy = []
+        dos = []
+        for raw_line in content.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) >= 2:
+                try:
+                    energy.append(float(parts[0]))
+                    dos.append(float(parts[1]))
+                except ValueError:
+                    continue
+        return np.array(energy), np.array(dos)
+
+    def parse(self):
+        """Parse DOS files and return a dict with energy, tdos, dos1, dos2"""
+        result = {}
+
+        if self.dos1_content is not None:
+            energy, dos1 = self._parse_single(self.dos1_content)
+            result["energy"] = energy
+            result["dos1"] = dos1
+        else:
+            result["dos1"] = None
+
+        if self.dos2_content is not None:
+            _, dos2 = self._parse_single(self.dos2_content)
+            result["dos2"] = dos2
+        else:
+            result["dos2"] = None
+
+        if result.get("dos1") is not None and result.get("dos2") is not None:
+            result["tdos"] = result["dos1"] + result["dos2"]
+        elif result.get("dos1") is not None:
+            result["tdos"] = result["dos1"].copy()
+        elif result.get("dos2") is not None:
+            result["tdos"] = result["dos2"].copy()
+        else:
+            result["tdos"] = None
+
+        return result
+
+
 class KpointsParser(BaseRawParser):
     """
     Parse the kpoints file in the suffix.out folder

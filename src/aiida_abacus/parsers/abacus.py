@@ -13,7 +13,14 @@ from aiida.parsers.parser import Parser
 from aiida.plugins import CalculationFactory
 
 from ..common import make_retrieve_list
-from .raw_parsers import AbacusRawParser, InternalParametersParser, KpointsParser, StruParser, WarningLogParser
+from .raw_parsers import (
+    AbacusRawParser,
+    DosParser,
+    InternalParametersParser,
+    KpointsParser,
+    StruParser,
+    WarningLogParser,
+)
 
 
 class ParserError(RuntimeError):
@@ -36,6 +43,7 @@ AbacusCalculation = CalculationFactory("abacus.abacus")
 
 DEFAULT_OUTPUT_SETTINGS = {
     "bands": False,
+    "dos": False,
     "internal_parameters": False,
     "kpoints": False,
 }
@@ -184,6 +192,41 @@ class AbacusParser(Parser):
             # Record the fermi level - the unit is eV
             node.base.attributes.set("fermi_level", misc_node.get("fermi_level"))
             self.out("bands", node)
+
+        # Parse the DOS output if requested
+        if self.check_include_node("dos"):
+            folder_name = "OUT." + output_suffix
+            dos1_path = folder_name + "/DOS1_smearing.dat"
+            dos2_path = folder_name + "/DOS2_smearing.dat"
+
+            dos1_content = None
+            dos2_content = None
+            try:
+                with output_folder.open(dos1_path, "r") as f:
+                    dos1_content = f.read()
+            except FileNotFoundError:
+                pass
+            try:
+                with output_folder.open(dos2_path, "r") as f:
+                    dos2_content = f.read()
+            except FileNotFoundError:
+                pass
+
+            if dos1_content is None and dos2_content is None:
+                self.logger.warning("No DOS files found for parsing")
+            else:
+                parser = DosParser(dos1_content, dos2_content)
+                result = parser.parse()
+                dos_node = orm.ArrayData()
+                if result["energy"] is not None:
+                    dos_node.set_array("energy", result["energy"])
+                if result["tdos"] is not None:
+                    dos_node.set_array("tdos", result["tdos"])
+                if result["dos1"] is not None:
+                    dos_node.set_array("dos1", result["dos1"])
+                if result["dos2"] is not None:
+                    dos_node.set_array("dos2", result["dos2"])
+                self.out("dos", dos_node)
 
         # TODO: there could be other types that should have a output structure
         if run_type in ["relax", "cell-relax", "md"]:
