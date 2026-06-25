@@ -6,6 +6,7 @@ import typing as t
 from aiida import orm
 from aiida.common import exceptions
 from aiida.common.files import md5_from_filelike
+from aiida.orm.nodes.caching import NodeCaching
 from aiida_pseudo.data.pseudo import UpfData
 
 FilePath = t.Union[str, pathlib.PurePosixPath]
@@ -250,3 +251,29 @@ class AtomicOrbitalData(UpfData, DualfileMixin):
             )
 
         return True
+
+
+class _AtomicOrbitalDataCaching(NodeCaching):
+    """Caching class for AtomicOrbitalData that includes orbital file content.
+
+    Inherits from ``NodeCaching`` to preserve the full caching interface required by
+    AiiDA, while extending ``get_objects_to_hash`` so that the cache key incorporates
+    the orbital file in addition to the UPF pseudopotential.
+    """
+
+    def get_objects_to_hash(self) -> dict[str, str]:
+        """Return a dict of objects which should be included in the node hash.
+
+        In addition to the element and UPF md5 returned by ``UpfData``'s caching,
+        we include the orbital file md5, filename, and full repository hash so that
+        ``AtomicOrbitalData`` nodes with different orbital files (but the same UPF)
+        have distinct cache keys.
+        """
+        objects: dict[str, str] = {"element": self._node.element, "md5": self._node.md5}
+        objects["md5_orbital"] = self._node.base.attributes.get("md5_orbital")
+        objects["filename_second"] = self._node.base.attributes.get("filename_second")
+        objects["repository_hash"] = self._node.base.repository.hash()
+        return objects
+
+
+AtomicOrbitalData._CLS_NODE_CACHING = _AtomicOrbitalDataCaching
