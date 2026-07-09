@@ -104,6 +104,14 @@ class AbacusParser(Parser):
             raw_parser = AbacusRawParser(fhandle)
         misc_results.update(raw_parser.parse())
 
+        # The magnetism keys are populated by the raw parser unconditionally so the
+        # value-presence is captured consistently. Strip them from the misc node when
+        # the calculation is not spin-polarised, since ABACUS does not emit any
+        # magnetism lines in `running_*.log` for nspin=1.
+        if not self._parameters_have_magnetism(self.node.inputs.parameters):
+            misc_results.pop("magnetism", None)
+            misc_results.pop("final_magnetism", None)
+
         # Check if calculation completed successfully using run_status from raw parser
         run_status = misc_results.get("run_status", {})
         notifications = run_status.get("notifications", [])
@@ -272,6 +280,23 @@ class AbacusParser(Parser):
             mandatory.append(f"{folder_name}/kpoints")
 
         return mandatory
+
+    @staticmethod
+    def _parameters_have_magnetism(parameters) -> bool:
+        """Return ``True`` if the calculation is spin-polarised (i.e. emits magmom lines).
+
+        ABACUS only reports ``total magnetism`` / ``absolute magnetism`` in
+        ``running_*.log`` when ``nspin`` is ``2`` (collinear) or ``4`` (non-collinear);
+        for ``nspin == 1`` the corresponding lines are not emitted. We therefore key
+        the magnetism parser off ``parameters['input']['nspin']`` only.
+        """
+        if parameters is None:
+            return False
+        if isinstance(parameters, orm.Dict):
+            parameters = parameters.get_dict()
+
+        input_block = parameters.get("input", {}) or {}
+        return int(input_block.get("nspin", 1) or 1) > 1
 
     @staticmethod
     def _merge_warnings(*warning_sets: list[dict]) -> list[dict]:

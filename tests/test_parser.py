@@ -566,3 +566,89 @@ def test_parser_does_not_apply_scf_convergence_failure_to_nscf(calc_with_retriev
 
     assert exit_code is None
     assert "misc" in parser.outputs
+
+
+def test_parser_parses_magnetism_when_nspin_is_2(calc_with_retrieved, tmp_path, data_folder):
+    """A spin-polarised SCF (nspin=2) should auto-enable magnetism parsing."""
+    source_log = (data_folder / "mag_Si_lcao/nspin2_running_scf.log").read_text()
+    file_path = tmp_path / "mag_si_lcao_nspin2"
+    _write_retrieved_tree(file_path, "scf", source_log)
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "scf", "nspin": 2}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    assert "misc" in parser.outputs
+
+    misc = parser.outputs["misc"].get_dict()
+    assert "magnetism" in misc
+    assert "final_magnetism" in misc
+    assert set(misc["magnetism"]) == {"total_magnetism", "absolute_magnetism"}
+    assert len(misc["magnetism"]["total_magnetism"]) == 13
+    assert len(misc["magnetism"]["absolute_magnetism"]) == 13
+    assert misc["final_magnetism"] == {
+        "total_magnetism": 5.08369e-17,
+        "absolute_magnetism": 3.36813e-09,
+    }
+    # First electronic step in the fixture carries a clearly non-zero moment.
+    assert misc["magnetism"]["total_magnetism"][0] == pytest.approx(-9.60176e-11)
+    assert misc["magnetism"]["absolute_magnetism"][0] == pytest.approx(0.361711)
+
+
+def test_parser_parses_magnetism_when_nspin_is_4(calc_with_retrieved, tmp_path, data_folder):
+    """A non-collinear SCF (nspin=4) should also auto-enable magnetism parsing,
+    and each entry of ``total_magnetism`` should be a 3-vector ``[mx, my, mz]``."""
+    source_log = (data_folder / "mag_Si_lcao/nspin4_running_scf.log").read_text()
+    file_path = tmp_path / "mag_si_lcao_nspin4"
+    _write_retrieved_tree(file_path, "scf", source_log)
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "scf", "nspin": 4}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    misc = parser.outputs["misc"].get_dict()
+    # nspin=4 fixture reports 14 electronic steps.
+    assert len(misc["magnetism"]["total_magnetism"]) == 14
+    assert len(misc["magnetism"]["absolute_magnetism"]) == 14
+    # Last entry is on lines 706-707 of the fixture.
+    final = misc["final_magnetism"]
+    assert final["total_magnetism"] == [
+        pytest.approx(-1.51861e-16),
+        pytest.approx(-2.1343e-16),
+        pytest.approx(-2.54856e-09),
+    ]
+    assert final["absolute_magnetism"] == pytest.approx(2.98079e-08)
+
+
+def test_parser_omits_magnetism_when_nspin_is_1(calc_with_retrieved, tmp_path, data_folder):
+    """A non-spin-polarised calculation (nspin=1) should not include magnetism by default."""
+    source_log = (data_folder / "mag_Si_lcao/nspin2_running_scf.log").read_text()
+    file_path = tmp_path / "mag_si_lcao_nspin1"
+    _write_retrieved_tree(file_path, "scf", source_log)
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "scf", "nspin": 1}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    misc = parser.outputs["misc"].get_dict()
+    assert "magnetism" not in misc
+    assert "final_magnetism" not in misc
+
+
+def test_parser_omits_magnetism_when_nspin_is_unset(calc_with_retrieved, tmp_path, data_folder):
+    """A calculation that omits ``nspin`` should default to nspin=1 and skip magnetism."""
+    source_log = (data_folder / "mag_Si_lcao/nspin2_running_scf.log").read_text()
+    file_path = tmp_path / "mag_si_lcao_nspin_unset"
+    _write_retrieved_tree(file_path, "scf", source_log)
+
+    node = calc_with_retrieved(str(file_path), parameters={"input": {"calculation": "scf"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is None
+    misc = parser.outputs["misc"].get_dict()
+    assert "magnetism" not in misc
+    assert "final_magnetism" not in misc
