@@ -69,6 +69,79 @@ class AbacusRawParser(BaseRawParser):
         self.results["final_forces"] = all_forces[-1] if all_forces else None
         self.results["final_stress"] = all_stress[-1] if all_stress else None
 
+    def parse_magnetism(self) -> None:
+        """
+        Parse the per-electronic-step ``total magnetism`` and ``absolute magnetism``
+        values reported by ABACUS.
+
+        The line format depends on the spin treatment:
+
+        * ``nspin == 2`` (collinear) — single scalar after ``=``::
+
+              total magnetism (Bohr mag/cell) = -3.13515e-06
+           absolute magnetism (Bohr mag/cell) = 8.57839e-06
+
+        * ``nspin == 4`` (non-collinear) — three tab-separated cartesian
+          components for the total vector, single scalar for the absolute value::
+
+              total magnetism (Bohr mag/cell)\t-1.89816e-16\t-2.03396e-18\t-5.64117e-05
+             absolute magnetism (Bohr mag/cell) = 0.000798729
+
+        Results are stored (in ``self.results``) under the keys
+        ``magnetism`` (a dict with one ``total_magnetism`` and one
+        ``absolute_magnetism`` list) and ``final_magnetism`` (a dict with
+        the last reported entry for each key). For nspin=2 each element of
+        ``magnetism['total_magnetism']`` is a ``float``; for nspin=4 each
+        element is a list of three floats ``[mx, my, mz]``. The
+        ``absolute_magnetism`` list always contains ``float`` values. When
+        no magnetism lines are found both keys are set to ``None`` so the
+        caller can distinguish "not reported" from "reported as zero".
+        """
+        # nspin=2: `... = <scalar>`
+        total_scalar_re = re.compile(r"total magnetism \(Bohr mag/cell\)\s*=\s*([-+0-9.eE]+)")
+        # nspin=4: `<header>\t<mx>\t<my>\t<mz>` (tab-separated, no '=')
+        total_vector_re = re.compile(
+            r"total magnetism \(Bohr mag/cell\)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)"
+        )
+        absolute_magnetism_re = re.compile(r"absolute magnetism \(Bohr mag/cell\)\s*=\s*([-+0-9.eE]+)")
+
+        total_magnetism = []
+        absolute_magnetism = []
+
+        for line in self.lines:
+            scalar_match = total_scalar_re.search(line)
+            if scalar_match:
+                total_magnetism.append(float(scalar_match.group(1)))
+                continue
+            vector_match = total_vector_re.search(line)
+            if vector_match:
+                total_magnetism.append(
+                    [
+                        float(vector_match.group(1)),
+                        float(vector_match.group(2)),
+                        float(vector_match.group(3)),
+                    ]
+                )
+                continue
+            abs_match = absolute_magnetism_re.search(line)
+            if abs_match:
+                absolute_magnetism.append(float(abs_match.group(1)))
+
+        magnetism = None
+        final_magnetism = None
+        if total_magnetism or absolute_magnetism:
+            magnetism = {
+                "total_magnetism": total_magnetism,
+                "absolute_magnetism": absolute_magnetism,
+            }
+            final_magnetism = {
+                "total_magnetism": total_magnetism[-1] if total_magnetism else None,
+                "absolute_magnetism": absolute_magnetism[-1] if absolute_magnetism else None,
+            }
+
+        self.results["magnetism"] = magnetism
+        self.results["final_magnetism"] = final_magnetism
+
     def parse(self) -> dict:
         """
         Parse ABACUS output file.
@@ -76,6 +149,7 @@ class AbacusRawParser(BaseRawParser):
         :returns: parsed results as a dictionary
         """
         self.parse_blocks()
+        self.parse_magnetism()
         # Parse the lines one-by-one for general information of the calculation
         self.results["energies"] = []  # Container for the per-ionic-step energies in eV
         self.results["electronic_energies"] = []

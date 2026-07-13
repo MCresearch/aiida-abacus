@@ -194,3 +194,129 @@ def test_parse_runtime_warnings():
         {"source": "running_log", "message": "Threshold on eigenvalues was too large."},
         {"source": "running_log", "message": "Falling back to a slower path"},
     ]
+
+
+def test_parse_magnetism_returns_none_when_no_magnetism_lines():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " some unrelated log line",
+                    " E_KohnSham     -1989.2618545111     -27065.2960353985",
+                ]
+            )
+        )
+    )
+
+    parser.parse_magnetism()
+
+    assert parser.results["magnetism"] is None
+    assert parser.results["final_magnetism"] is None
+
+
+def test_parse_magnetism_collects_per_step_values():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " LCAO ALGORITHM --------------- ION=   1  ELEC=  21--------------------------------",
+                    "          total magnetism (Bohr mag/cell) = 0.933056",
+                    "       absolute magnetism (Bohr mag/cell) = 0.933056",
+                    " LCAO ALGORITHM --------------- ION=   1  ELEC=  22--------------------------------",
+                    "          total magnetism (Bohr mag/cell) = -3.13515e-06",
+                    "       absolute magnetism (Bohr mag/cell) = 8.57839e-06",
+                ]
+            )
+        )
+    )
+
+    parser.parse_magnetism()
+
+    assert parser.results["magnetism"] == {
+        "total_magnetism": [0.933056, -3.13515e-06],
+        "absolute_magnetism": [0.933056, 8.57839e-06],
+    }
+    assert parser.results["final_magnetism"] == {
+        "total_magnetism": -3.13515e-06,
+        "absolute_magnetism": 8.57839e-06,
+    }
+
+
+def test_parse_magnetism_on_mag_si_lcao_log(data_folder):
+    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin2_running_scf.log")
+    parser.parse_magnetism()
+
+    magnetism = parser.results["magnetism"]
+    final_magnetism = parser.results["final_magnetism"]
+
+    # The fixture has 13 electronic steps reporting magnetism.
+    assert magnetism is not None
+    assert set(magnetism) == {"total_magnetism", "absolute_magnetism"}
+    assert len(magnetism["total_magnetism"]) == 13
+    assert len(magnetism["absolute_magnetism"]) == 13
+    for value in magnetism["total_magnetism"]:
+        assert isinstance(value, float)
+    for value in magnetism["absolute_magnetism"]:
+        assert isinstance(value, float)
+
+    # Final step of the nspin=2 fixture.
+    assert final_magnetism == {
+        "total_magnetism": 5.08369e-17,
+        "absolute_magnetism": 3.36813e-09,
+    }
+    # First electronic step is a clearly non-zero magnetic moment.
+    assert magnetism["total_magnetism"][0] == pytest.approx(-9.60176e-11)
+    assert magnetism["absolute_magnetism"][0] == pytest.approx(0.361711)
+
+
+def test_parse_magnetism_on_nspin2_collinear_log(data_folder):
+    """The nspin=2 fixture uses the `... = <scalar>` form for total magnetism."""
+    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin2_running_scf.log")
+    parser.parse_magnetism()
+
+    magnetism = parser.results["magnetism"]
+    assert magnetism is not None
+    assert len(magnetism["total_magnetism"]) == 13
+    assert len(magnetism["absolute_magnetism"]) == 13
+    for value in magnetism["total_magnetism"]:
+        assert isinstance(value, float)
+    for value in magnetism["absolute_magnetism"]:
+        assert isinstance(value, float)
+
+    final = parser.results["final_magnetism"]
+    assert isinstance(final["total_magnetism"], float)
+    assert isinstance(final["absolute_magnetism"], float)
+
+
+def test_parse_magnetism_on_nspin4_noncollinear_log(data_folder):
+    """The nspin=4 fixture emits total magnetism as three tab-separated components."""
+    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin4_running_scf.log")
+    parser.parse_magnetism()
+
+    magnetism = parser.results["magnetism"]
+    final_magnetism = parser.results["final_magnetism"]
+
+    assert magnetism is not None
+    # nspin=4 fixture has 14 electronic steps.
+    assert len(magnetism["total_magnetism"]) == 14
+    assert len(magnetism["absolute_magnetism"]) == 14
+    for component in magnetism["total_magnetism"]:
+        # Each total-magnetism entry is a 3-vector [mx, my, mz].
+        assert isinstance(component, list)
+        assert len(component) == 3
+        for value in component:
+            assert isinstance(value, float)
+    for value in magnetism["absolute_magnetism"]:
+        # absolute_magnetism stays a scalar.
+        assert isinstance(value, float)
+
+    # The last entry is on lines 706-707 of the fixture.
+    assert final_magnetism["total_magnetism"] == [
+        pytest.approx(-1.51861e-16),
+        pytest.approx(-2.1343e-16),
+        pytest.approx(-2.54856e-09),
+    ]
+    assert final_magnetism["absolute_magnetism"] == pytest.approx(2.98079e-08)
+    # First nspin=4 step has a clearly non-zero mz component.
+    assert magnetism["total_magnetism"][0][2] == pytest.approx(0.212635)
+    assert magnetism["absolute_magnetism"][0] == pytest.approx(0.212659)
