@@ -142,6 +142,37 @@ class AbacusRawParser(BaseRawParser):
         self.results["magnetism"] = magnetism
         self.results["final_magnetism"] = final_magnetism
 
+    def parse_total_time(self) -> None:
+        """
+        Parse the ``Total  Time`` wall-clock duration reported at the end of the
+        ABACUS log, e.g.::
+
+            Total  Time  : 0 h 0 mins 2 secs
+
+        The result is stored in ``self.results`` as ``total_time`` (a float of
+        seconds) and ``total_time_unit`` (the string ``"s"``). When the line
+        cannot be located or fails to parse, both keys are set to ``None`` so
+        the caller can distinguish "not reported" from "reported as zero".
+        """
+        total_time = None
+        # The "Total  Time" line uses two spaces between "Total" and "Time";
+        # mirror that exactly in the pattern. The summary line is always at
+        # the very end of the log, so we only need to scan the tail and pick
+        # the first match we find there; this avoids a full-log regex sweep
+        # for very large log files.
+        total_time_re = re.compile(r"Total\s+Time\s*:\s*(\d+)\s*h\s*(\d+)\s*mins\s*(\d+)\s*secs")
+        for line in self.lines[-100:]:
+            match = total_time_re.search(line)
+            if match:
+                hours = int(match.group(1))
+                minutes = int(match.group(2))
+                seconds = int(match.group(3))
+                total_time = float(hours * 3600 + minutes * 60 + seconds)
+                break
+
+        self.results["total_time"] = total_time
+        self.results["total_time_unit"] = "s" if total_time is not None else None
+
     def parse(self) -> dict:
         """
         Parse ABACUS output file.
@@ -150,6 +181,7 @@ class AbacusRawParser(BaseRawParser):
         """
         self.parse_blocks()
         self.parse_magnetism()
+        self.parse_total_time()
         # Parse the lines one-by-one for general information of the calculation
         self.results["energies"] = []  # Container for the per-ionic-step energies in eV
         self.results["electronic_energies"] = []

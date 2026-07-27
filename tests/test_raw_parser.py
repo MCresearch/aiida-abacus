@@ -320,3 +320,79 @@ def test_parse_magnetism_on_nspin4_noncollinear_log(data_folder):
     # First nspin=4 step has a clearly non-zero mz component.
     assert magnetism["total_magnetism"][0][2] == pytest.approx(0.212635)
     assert magnetism["absolute_magnetism"][0] == pytest.approx(0.212659)
+
+
+def test_parse_total_time_returns_none_when_no_total_time_line():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " some unrelated log line",
+                    " E_KohnSham     -1989.2618545111     -27065.2960353985",
+                ]
+            )
+        )
+    )
+
+    parser.parse_total_time()
+
+    assert parser.results["total_time"] is None
+    assert parser.results["total_time_unit"] is None
+
+
+def test_parse_total_time_converts_to_seconds():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " Start  Time  : Sat Mar 22 15:22:30 2025",
+                    " Finish Time  : Sat Mar 22 15:22:32 2025",
+                    " Total  Time  : 0 h 0 mins 2 secs ",
+                ]
+            )
+        )
+    )
+
+    parser.parse_total_time()
+
+    assert parser.results["total_time"] == 2.0
+    assert parser.results["total_time_unit"] == "s"
+
+
+def test_parse_total_time_handles_hours_and_minutes():
+    parser = AbacusRawParser(StringIO("Total  Time  : 1 h 2 mins 3 secs \n"))
+
+    parser.parse_total_time()
+
+    # 1*3600 + 2*60 + 3 = 3723
+    assert parser.results["total_time"] == 3723.0
+    assert parser.results["total_time_unit"] == "s"
+
+
+def test_parse_total_time_picks_first_match_in_tail_window():
+    parser = AbacusRawParser(
+        StringIO(
+            "\n".join(
+                [
+                    " ...intermediate log lines...",
+                    " Total  Time  : 0 h 0 mins 1 secs ",
+                    " Total  Time  : 0 h 0 mins 27 secs ",
+                ]
+            )
+        )
+    )
+
+    parser.parse_total_time()
+
+    # The parser only scans the last 100 lines and returns the first match
+    # it finds there; the second occurrence is irrelevant.
+    assert parser.results["total_time"] == 1.0
+
+
+def test_parse_total_time_on_pw_si2_log(data_folder):
+    """The pw_Si2 fixture (lines 683-685) reports `0 h 0 mins 2 secs` -> 2 s."""
+    parser = AbacusRawParser(data_folder / "pw_Si2/OUT.aiida/running_scf.log")
+    parser.parse_total_time()
+
+    assert parser.results["total_time"] == 2.0
+    assert parser.results["total_time_unit"] == "s"
