@@ -96,6 +96,18 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
         spec.output("dos", valid_type=orm.ArrayData, required=False, help="Output density of states data.")
+        spec.output(
+            "bands_projected",
+            valid_type=orm.ArrayData,
+            required=False,
+            help="Projected band structure (PBAND_1). Only available when run_proj_band is True.",
+        )
+        spec.output(
+            "dos_projected",
+            valid_type=orm.ArrayData,
+            required=False,
+            help="Projected density of states (PDOS). Only available when run_proj_dos is True.",
+        )
         spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
         spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
         spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
@@ -323,6 +335,17 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 del inputs["kpoints_distance"]
             inputs.abacus.settings = inputs.abacus.settings.get_dict() if "settings" in inputs.abacus else {}
             inputs.abacus.settings["include_bands"] = True
+            if self.ctx.band_settings.get("run_proj_band", False):
+                # ABACUS writes the projected band structure to PBAND_1 when
+                # out_proj_band is true. We restore any prior value first and
+                # then force-enable so callers do not have to know about the
+                # underlying INPUT flag.
+                inputs.abacus.parameters["input"]["out_proj_band"] = True
+                additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
+                if "PBAND_1" not in additional_retrieve:
+                    additional_retrieve.append("PBAND_1")
+                inputs.abacus.settings["additional_retrieve_list"] = additional_retrieve
+                inputs.abacus.settings["include_projected_bands"] = True
             band_input = prepare_process_inputs(AbacusBaseWorkChain, inputs)
             running["band_workchain"] = self.submit(AbacusBaseWorkChain, **band_input)
         if self.ctx.band_settings.get("run_dos", False):
@@ -336,13 +359,20 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
             nspin = inputs.abacus.parameters["input"].get("nspin", 1)
             outdos = inputs.abacus.parameters["input"].get("out_dos", None)
-            if outdos is None:
+            if self.ctx.band_settings.get("run_proj_dos", False):
+                # out_dos=2 enables PDOS in addition to the regular DOS files.
+                inputs.abacus.parameters["input"]["out_dos"] = 2
+            elif outdos is None:
                 inputs.abacus.parameters["input"]["out_dos"] = 1
             if nspin == 1:
                 tdos_file = ["DOS1_smearing.dat"]
             else:
                 tdos_file = ["DOS1_smearing.dat", "DOS2_smearing.dat"]
             additional_retrieve.extend(tdos_file)
+            if self.ctx.band_settings.get("run_proj_dos", False):
+                if "PDOS" not in additional_retrieve:
+                    additional_retrieve.append("PDOS")
+                inputs.abacus.settings["include_projected_dos"] = True
             inputs.abacus.settings["additional_retrieve_list"] = additional_retrieve
             dos_input = prepare_process_inputs(AbacusBaseWorkChain, inputs)
             running["dos_workchain"] = self.submit(AbacusBaseWorkChain, **dos_input)
@@ -360,12 +390,9 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 self.report(f"Bands calculation finished with error, exit_status: {band_workchain}")
                 exit_code = self.exit_codes.ERROR_SUB_PROC_BANDS_FAILED
             else:
-                # Set the fermi level for the output band structure based on previous SCF calculation
-                if band_workchain.outputs.bands.attributes.get("fermi_level") is None:
-                    out_bands = add_fermi_level(band_workchain.outputs.bands, self.ctx.scf_workchain.outputs.misc)
-                else:
-                    out_bands = band_workchain.outputs.bands
-                self.out("band_structure", out_bands)
+                self.out("band_structure", band_workchain.outputs.bands)
+                if "bands_projected" in band_workchain.outputs:
+                    self.out("bands_projected", band_workchain.outputs.bands_projected)
 
         if "dos_workchain" in self.ctx:
             dos_workchain = self.ctx.dos_workchain
@@ -374,6 +401,8 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 exit_code = self.exit_codes.ERROR_SUB_PROC_DOS_FAILED
             else:
                 self.out("dos", dos_workchain.outputs.dos)
+                if "dos_projected" in dos_workchain.outputs:
+                    self.out("dos_projected", dos_workchain.outputs.dos_projected)
 
         return exit_code
 
@@ -397,11 +426,3 @@ def seekpath_structure_analysis(structure, band_settings):
     """
     # All keyword arugments should be `Data` node instances of base type and so should have the `.value` attribute
     return get_explicit_kpoints_path(structure, **band_settings.get_dict())
-
-
-@calcfunction
-def add_fermi_level(bands: orm.BandsData, misc: orm.Dict):
-    """Add fermi level to the bands"""
-    new_bands = bands.clone()
-    new_bands.base.attributes.set("fermi_level", misc.get("fermi_level"))
-    return new_bands

@@ -5,6 +5,7 @@ Register parsers via the "aiida.parsers" entry point in setup.json.
 """
 
 import re
+from io import StringIO
 
 import numpy as np
 from aiida import orm
@@ -18,6 +19,8 @@ from .raw_parsers import (
     DosParser,
     InternalParametersParser,
     KpointsParser,
+    PBandsParser,
+    PDosParser,
     StruParser,
     WarningLogParser,
 )
@@ -46,6 +49,8 @@ DEFAULT_OUTPUT_SETTINGS = {
     "dos": False,
     "internal_parameters": False,
     "kpoints": False,
+    "projected_bands": False,
+    "projected_dos": False,
 }
 
 RELAX_RUN_TYPES = {"relax", "cell-relax", "md"}
@@ -181,7 +186,7 @@ class AbacusParser(Parser):
                 raise AssertionError(
                     f"kcoord.shape={kcoord.shape} does not match eigenvalues.shape[1]={eigenvalues.shape[1]}."
                 )
-            node.set_bands(eigenvalues, occupations=occupations)
+            node.set_bands(eigenvalues, occupations=occupations, units="eV")
 
             # Handle kpoints labels - ABACUS may remove duplicate kpoints
             if hasattr(self.node.inputs, "kpoints") and hasattr(self.node.inputs.kpoints, "labels"):
@@ -241,6 +246,56 @@ class AbacusParser(Parser):
                 if fermi_level is not None:
                     dos_node.base.attributes.set("fermi_level", fermi_level)
                 self.out("dos", dos_node)
+
+        # Parse the projected band structure (PBAND_1) if requested
+        if self.check_include_node("projected_bands"):
+            pband_path = f"OUT.{output_suffix}/PBAND_1"
+            try:
+                with output_folder.open(pband_path, "r") as f:
+                    pband_content = f.read()
+            except FileNotFoundError:
+                self.logger.warning("Projected band file not found: %s", pband_path)
+                pband_content = None
+
+            if pband_content is not None:
+                result = PBandsParser(StringIO(pband_content)).parse()
+                node = orm.ArrayData()
+                node.set_array("band_structure", result["band_structure"])
+                node.set_array("orbital_weights", np.stack([o["weights"] for o in result["orbitals"]], axis=0))
+                node.base.attributes.set("nspin", result["nspin"])
+                node.base.attributes.set("norbitals", result["norbitals"])
+                orbital_metadata = np.array([o["attrs"] for o in result["orbitals"]], dtype=object)
+                node.base.attributes.set("orbital_metadata", orbital_metadata)
+                # The projected band structure shares the regular band structure's
+                # eigenvalues, so the same fermi level applies.
+                fermi_level = misc_results.get("fermi_level")
+                if fermi_level is not None:
+                    node.base.attributes.set("fermi_level", fermi_level)
+                self.out("bands_projected", node)
+
+        # Parse the projected DOS (PDOS) if requested
+        if self.check_include_node("projected_dos"):
+            pdos_path = f"OUT.{output_suffix}/PDOS"
+            try:
+                with output_folder.open(pdos_path, "r") as f:
+                    pdos_content = f.read()
+            except FileNotFoundError:
+                self.logger.warning("Projected DOS file not found: %s", pdos_path)
+                pdos_content = None
+
+            if pdos_content is not None:
+                result = PDosParser(StringIO(pdos_content)).parse()
+                node = orm.ArrayData()
+                node.set_array("energy", result["energy"])
+                node.set_array("orbital_pdos", np.stack([o["pdos"] for o in result["orbitals"]], axis=0))
+                node.base.attributes.set("nspin", result["nspin"])
+                node.base.attributes.set("norbitals", result["norbitals"])
+                orbital_metadata = np.array([o["attrs"] for o in result["orbitals"]], dtype=object)
+                node.base.attributes.set("orbital_metadata", orbital_metadata)
+                fermi_level = misc_results.get("fermi_level")
+                if fermi_level is not None:
+                    node.base.attributes.set("fermi_level", fermi_level)
+                self.out("dos_projected", node)
 
         # TODO: there could be other types that should have a output structure
         if run_type in ["relax", "cell-relax", "md"]:

@@ -11,10 +11,10 @@ logger = getLogger(__name__)
 class BaseRawParser:
     def __init__(self, fhandle):
         """A parser for the ABACUS output file."""
-        if not hasattr(fhandle, "read"):
-            self.content = Path(fhandle).read_text()
-        else:
+        if hasattr(fhandle, "read"):
             self.content = fhandle.read()
+        else:
+            self.content = Path(fhandle).read_text()
         self.lines = self.content.split("\n")
 
 
@@ -734,3 +734,168 @@ class WarningLogParser(BaseRawParser):
             if match:
                 notifications.append({"source": match.group(1), "message": match.group(2).strip()})
         return notifications
+
+
+class PBandsParser(BaseRawParser):
+    """Parser for the projected-band structure file ``PBANDS_1``.
+
+    The file is ABACUS-flavoured XML with the following structure::
+
+        <pband>
+          <nspin>1</nspin>
+          <norbitals>13</norbitals>
+          <band_structure nkpoints="358" nbands="12" units="eV">
+            ... nkpoints lines of nbands floats each ...
+          </band_structure>
+          <orbital
+          index="1"
+          atom_index="1"
+          species="Si"
+          l="0"
+          m="0"
+          z="1"
+          >
+            <data>
+              ... nkpoints lines of nbands floats each ...
+            </data>
+          </orbital>
+          ... one <orbital> per (atom, l, m, z) ...
+        </pband>
+
+    Note that the opening ``<orbital ...>`` tag spans multiple lines, which
+    is not strictly valid XML. The parser therefore walks the file with
+    line-by-line regex matching instead of an XML library.
+
+    The returned dict has:
+    * ``nspin`` / ``norbitals``
+    * ``band_structure`` (np.ndarray of shape ``(nkpoints, nbands)``) — the
+      eigenvalues at each k-point, identical to the regular ``BANDS_*`` data.
+    * ``orbitals`` (list of dicts) — one per orbital, with ``attrs`` (dict of
+      ``index/atom_index/species/l/m/z``) and ``weights`` (np.ndarray of shape
+      ``(nkpoints, nbands)``). The order matches the order in the file.
+    """
+
+    _ATTR_PATTERN = re.compile(r"(\w+)\s*=\s*\"([^\"]*)\"")
+    _ORBITAL_OPEN_PATTERN = re.compile(r"^<orbital\b", re.MULTILINE)
+    _ORBITAL_DATA_PATTERN = re.compile(r"<data>(.*?)</data>", re.DOTALL)
+    _BAND_STRUCT_PATTERN = re.compile(r"<band_structure[^>]*>(.*?)</band_structure>", re.DOTALL)
+    _BAND_STRUCT_HEADER_PATTERN = re.compile(r"<band_structure([^>]*)>")
+    _NBANDS_PATTERN = re.compile(r"nbands\s*=\s*\"([^\"]*)\"")
+    _NSPIN_PATTERN = re.compile(r"<nspin>([^<]+)</nspin>")
+    _NORBITALS_PATTERN = re.compile(r"<norbitals>([^<]+)</norbitals>")
+
+    def parse(self) -> dict:
+        """Parse ``PBANDS_1`` and return the projected band-structure data."""
+        if "<pband>" not in self.content:
+            raise ValueError("Expected <pband> root tag")
+
+        nspin = int(self._NSPIN_PATTERN.search(self.content).group(1))
+        norbitals = int(self._NORBITALS_PATTERN.search(self.content).group(1))
+
+        band_struct_match = self._BAND_STRUCT_PATTERN.search(self.content)
+        if band_struct_match is None:
+            raise ValueError("Missing <band_structure> block in PBANDS_1")
+        band_struct_header = self._BAND_STRUCT_HEADER_PATTERN.search(self.content)
+        nbands = int(self._NBANDS_PATTERN.search(band_struct_header.group(1)).group(1).strip())
+        band_structure = np.fromstring(band_struct_match.group(1), sep=" ", dtype=float).reshape(-1, nbands)
+
+        orbitals = []
+        for orbital_match in self._ORBITAL_OPEN_PATTERN.finditer(self.content):
+            # Walk from the <orbital ...> opening tag until the matching </orbital>.
+            start = orbital_match.start()
+            end_idx = self.content.find("</orbital>", start)
+            if end_idx < 0:
+                continue
+            block = self.content[start:end_idx]
+            attrs = {m.group(1): m.group(2).strip() for m in self._ATTR_PATTERN.finditer(block.split(">")[0] + ">")}
+            data_match = self._ORBITAL_DATA_PATTERN.search(block)
+            if data_match is None:
+                continue
+            weights = np.fromstring(data_match.group(1), sep=" ", dtype=float).reshape(band_structure.shape)
+            orbitals.append({"attrs": attrs, "weights": weights})
+
+        return {
+            "nspin": nspin,
+            "norbitals": norbitals,
+            "band_structure": band_structure,
+            "orbitals": orbitals,
+        }
+
+
+class PDosParser(BaseRawParser):
+    """Parser for the projected density-of-states file ``PDOS``.
+
+    The file is ABACUS-flavoured XML with the following structure::
+
+        <pdos>
+          <nspin>1</nspin>
+          <norbitals>13</norbitals>
+          <energy_values units="eV">
+            ... ne lines of floats ...
+          </energy_values>
+          <orbital
+          index="1"
+          atom_index="1"
+          species="Si"
+          l="0"
+          m="0"
+          z="1"
+          >
+            <data>
+              ... ne lines of nbands floats each ...
+            </data>
+          </orbital>
+          ... one <orbital> per (atom, l, m, z) ...
+        </pdos>
+
+    The opening ``<orbital ...>`` tag spans multiple lines (not strictly
+    valid XML); the parser walks the file with line-by-line regex matching.
+
+    The returned dict has:
+    * ``nspin`` / ``norbitals``
+    * ``energy`` (np.ndarray of shape ``(ne,)``) — the energy grid.
+    * ``orbitals`` (list of dicts) — one per orbital, with ``attrs`` and
+      ``pdos`` (np.ndarray of shape ``(ne, nbands)``).
+    """
+
+    _ATTR_PATTERN = PBandsParser._ATTR_PATTERN
+    _ORBITAL_OPEN_PATTERN = re.compile(r"^<orbital\b", re.MULTILINE)
+    _ORBITAL_DATA_PATTERN = re.compile(r"<data>(.*?)</data>", re.DOTALL)
+    _ENERGY_PATTERN = re.compile(r"<energy_values[^>]*>(.*?)</energy_values>", re.DOTALL)
+    _NSPIN_PATTERN = re.compile(r"<nspin>([^<]+)</nspin>")
+    _NORBITALS_PATTERN = re.compile(r"<norbitals>([^<]+)</norbitals>")
+
+    def parse(self) -> dict:
+        """Parse ``PDOS`` and return the projected DOS data."""
+        if "<pdos>" not in self.content:
+            raise ValueError("Expected <pdos> root tag")
+
+        nspin = int(self._NSPIN_PATTERN.search(self.content).group(1))
+        norbitals = int(self._NORBITALS_PATTERN.search(self.content).group(1))
+
+        energy_match = self._ENERGY_PATTERN.search(self.content)
+        if energy_match is None:
+            raise ValueError("Missing <energy_values> block in PDOS")
+        energy = np.fromstring(energy_match.group(1), sep=" ", dtype=float).reshape(-1)
+
+        orbitals = []
+        for orbital_match in self._ORBITAL_OPEN_PATTERN.finditer(self.content):
+            start = orbital_match.start()
+            end_idx = self.content.find("</orbital>", start)
+            if end_idx < 0:
+                continue
+            block = self.content[start:end_idx]
+            attrs = {m.group(1): m.group(2).strip() for m in self._ATTR_PATTERN.finditer(block.split(">")[0] + ">")}
+            data_match = self._ORBITAL_DATA_PATTERN.search(block)
+            if data_match is None:
+                continue
+            values = np.fromstring(data_match.group(1), sep=" ", dtype=float)
+            nbands = values.size // energy.size
+            orbitals.append({"attrs": attrs, "pdos": values.reshape(energy.size, nbands)})
+
+        return {
+            "nspin": nspin,
+            "norbitals": norbitals,
+            "energy": energy,
+            "orbitals": orbitals,
+        }

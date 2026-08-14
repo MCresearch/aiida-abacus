@@ -661,6 +661,91 @@ def test_parser_dos_records_fermi_level_from_running_log(calc_with_retrieved, tm
     assert parser.outputs["dos"].base.attributes.get("fermi_level") == 6.5508038645
 
 
+def test_parser_bands_units_is_ev(parser_with_retrieved):
+    """BandsData.units must be set to "eV" (ABACUS band-structure units)."""
+    parser, _ = parser_with_retrieved("pw_Si2", settings={"include_bands": True})
+    bands = parser.outputs["bands"]
+    assert bands.base.attributes.get("units") == "eV"
+
+
+def test_parser_dos_projected_from_pdos(calc_with_retrieved, tmp_path, data_folder):
+    """Setting `include_projected_dos` produces a `dos_projected` ArrayData."""
+    _write_retrieved_tree(
+        tmp_path / "pdos",
+        "scf",
+        (data_folder / "pw_Si2" / "OUT.aiida" / "running_scf.log").read_text(),
+        warning_content=(data_folder / "pw_Si2" / "OUT.aiida" / "warning.log").read_text(),
+    )
+    (tmp_path / "pdos" / "OUT.aiida" / "PDOS").write_text((data_folder / "pband_synth" / "pdos.xml").read_text())
+
+    node = calc_with_retrieved(
+        str(tmp_path / "pdos"),
+        parameters={"input": {"calculation": "scf"}},
+        settings={"include_projected_dos": True},
+    )
+    parser = AbacusParser(node)
+    assert parser.parse() is None
+    assert "dos_projected" in parser.outputs
+    proj = parser.outputs["dos_projected"]
+    assert proj.get_array("energy").shape == (5,)
+    assert proj.get_array("orbital_pdos").shape == (2, 5, 1)
+    assert proj.base.attributes.get("norbitals") == 2
+
+
+def test_parser_dos_records_fermi_level_from_running_log(calc_with_retrieved, tmp_path, data_folder):
+    """`EFERMI` from `running_*.log` lands on the dos ArrayData as an attribute."""
+    file_path = tmp_path / "pw_si2_dos"
+    _write_retrieved_tree(
+        file_path,
+        "scf",
+        (data_folder / "pw_Si2" / "OUT.aiida" / "running_scf.log").read_text(),
+        warning_content=(data_folder / "pw_Si2" / "OUT.aiida" / "warning.log").read_text(),
+    )
+    (file_path / "OUT.aiida" / "DOS1_smearing.dat").write_text(
+        "\n".join(f"{e:.6f} {d:.6f}" for e, d in zip([-4.0, -2.0, 0.0, 2.0, 4.0], [0.1, 0.4, 1.0, 0.4, 0.1]))
+    )
+
+    node = calc_with_retrieved(
+        str(file_path),
+        parameters={"input": {"calculation": "scf"}},
+        settings={"include_dos": True},
+    )
+    parser = AbacusParser(node)
+    assert parser.parse() is None
+    assert parser.outputs["dos"].base.attributes.get("fermi_level") == 6.5508038645
+
+
+def test_parser_bands_units_is_ev(parser_with_retrieved):
+    """BandsData.units must be set to "eV" (ABACUS band-structure units)."""
+    parser, _ = parser_with_retrieved("pw_Si2", settings={"include_bands": True})
+    bands = parser.outputs["bands"]
+    assert bands.base.attributes.get("units") == "eV"
+
+
+def test_parser_dos_projected_from_pdos(calc_with_retrieved, tmp_path, data_folder):
+    """Setting `include_projected_dos` produces a `dos_projected` ArrayData."""
+    _write_retrieved_tree(
+        tmp_path / "pdos",
+        "scf",
+        (data_folder / "pw_Si2" / "OUT.aiida" / "running_scf.log").read_text(),
+        warning_content=(data_folder / "pw_Si2" / "OUT.aiida" / "warning.log").read_text(),
+    )
+    (tmp_path / "pdos" / "OUT.aiida" / "PDOS").write_text((data_folder / "pdos_synth" / "pdos.xml").read_text())
+
+    node = calc_with_retrieved(
+        str(tmp_path / "pdos"),
+        parameters={"input": {"calculation": "scf"}},
+        settings={"include_projected_dos": True},
+    )
+    parser = AbacusParser(node)
+    assert parser.parse() is None
+    assert "dos_projected" in parser.outputs
+    proj = parser.outputs["dos_projected"]
+    assert proj.get_array("energy").shape == (5,)
+    assert proj.get_array("orbital_pdos").shape == (2, 5, 1)
+    assert proj.base.attributes.get("norbitals") == 2
+
+
 def test_parser_omits_magnetism_when_nspin_is_unset(calc_with_retrieved, tmp_path, data_folder):
     """A calculation that omits ``nspin`` should default to nspin=1 and skip magnetism."""
     source_log = (data_folder / "mag_Si_lcao/nspin2_running_scf.log").read_text()
