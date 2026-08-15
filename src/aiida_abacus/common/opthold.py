@@ -93,10 +93,6 @@ class SettingsOptions(OptionContainer):
         description="Flag for including the kpoints in the output",
         default=False,
     )
-    include_projected_bands: bool = Field(
-        description="Flag for parsing the projected band structure (PBAND_1) into the output.",
-        default=False,
-    )
     include_projected_dos: bool = Field(
         description="Flag for parsing the projected DOS (PDOS) into the output.",
         default=False,
@@ -182,10 +178,6 @@ class BandOptions(OptionContainer):
     )
     run_dos: bool = Field(
         description="Flag for running DOS calculations",
-        default=False,
-    )
-    run_proj_band: bool = Field(
-        description="Flag for running projected band structure (PBAND) calculations. Implies run_bands.",
         default=False,
     )
     run_proj_dos: bool = Field(

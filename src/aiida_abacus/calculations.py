@@ -183,13 +183,6 @@ class AbacusCalculation(CalcJob):
         )
 
         spec.output(
-            "bands_projected",
-            valid_type=orm.ArrayData,
-            help="Projected band structure (PBAND_1).",
-            required=False,
-        )
-
-        spec.output(
             "dos_projected",
             valid_type=orm.ArrayData,
             help="Projected density of states (PDOS).",

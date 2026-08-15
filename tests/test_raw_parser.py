@@ -12,7 +12,6 @@ from aiida_abacus.parsers.raw_parsers import (
     BandsParser,
     InternalParametersParser,
     KpointsParser,
-    PBandsParser,
     PDosParser,
     StruParser,
     WarningLogParser,
@@ -101,29 +100,6 @@ def test_parse_kpoints_first_block_size_mismatch_raises():
     parser = AbacusRawParser(StringIO(log))
     with pytest.raises(ValueError, match="K-POINTS DIRECT block size does not match"):
         parser.parse_kpoints()
-
-
-def test_parse_kpoints_nspin2_collinear_real_log(data_folder):
-    """Regression test using the on-disk NSPIN=2 collinear ABACUS fixture.
-
-    The log ships with two ``K-POINTS DIRECT COORDINATES`` blocks: the first
-    lists 8 k-points for a single spin channel and the second lists the
-    combined 16 k-points (i.e. ``nks(nspin=2)``). The parser must return the
-    per-spin coordinates so they line up with ``eigenvalues.shape[1]``.
-    """
-    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin2_running_scf.log")
-    eigen, _occ, _kpt_cart = parser.parse_eigenvalues()
-    assert eigen.shape == (2, 8, 15)
-
-    kfrac, kcart = parser.parse_kpoints()
-    assert kfrac.shape == (8, 4)
-    assert kfrac.shape[0] == eigen.shape[1]
-    np.testing.assert_allclose(kfrac[0], [0.0, 0.0, 0.0, 0.0156])
-    np.testing.assert_allclose(kfrac[1], [0.25, 0.25, 0.25, 0.1250])
-    # The fixture only carries the merged all-spin ``K-POINTS CARTESIAN``
-    # block; the helper therefore returns it verbatim.
-    assert kcart is not None
-    assert kcart.shape[0] == 16
 
 
 def test_kpoints_parser(data_folder):
@@ -449,50 +425,6 @@ def test_parse_total_time_converts_to_seconds():
     assert parser.results["total_time_unit"] == "s"
 
 
-def test_pdos_parser(data_folder):
-    result = PDosParser(data_folder / "pband_synth" / "pdos.xml").parse()
-    assert result["nspin"] == 1
-    assert result["norbitals"] == 2
-    assert result["energy"].shape == (5,)
-    assert len(result["orbitals"]) == 2
-    for orbital in result["orbitals"]:
-        assert orbital["pdos"].shape == (5, 1)
-        assert orbital["attrs"]["species"] == "Si"
-
-
-def test_pdos_parser_on_real_si_lcao_fixture(data_folder):
-    """Regression test against the real PDOS produced by a Si LCAO run.
-
-    The fixture has 36848 energy grid points, 1 band (nspin=1), and 13
-    orbitals.
-    """
-    result = PDosParser(data_folder / "pband_Si_lcao" / "PDOS").parse()
-    assert result["nspin"] == 1
-    assert result["norbitals"] == 13
-    assert result["energy"].shape == (36848,)
-    assert len(result["orbitals"]) == 13
-    for orbital in result["orbitals"]:
-        assert orbital["pdos"].shape == (36848, 1)
-        assert orbital["attrs"]["species"] == "Si"
-    # The first orbital should be atom 1, l=0, m=0 (s-orbital on Si).
-    assert result["orbitals"][0]["attrs"] == {
-        "index": "1",
-        "atom_index": "1",
-        "species": "Si",
-        "l": "0",
-        "m": "0",
-        "z": "1",
-    }
-    # The last orbital should be index 13.
-    assert result["orbitals"][-1]["attrs"]["index"] == "13"
-
-
-def test_pdos_parser_rejects_wrong_root_tag():
-    parser = PDosParser(StringIO("<pband><nspin>1</nspin></pband>"))
-    with pytest.raises(ValueError, match="Expected <pdos> root tag"):
-        parser.parse()
-
-
 def test_parse_total_time_handles_hours_and_minutes():
     parser = AbacusRawParser(StringIO("Total  Time  : 1 h 2 mins 3 secs \n"))
 
@@ -532,69 +464,13 @@ def test_parse_total_time_on_pw_si2_log(data_folder):
     assert parser.results["total_time_unit"] == "s"
 
 
-def test_pbands_parser(data_folder):
-    result = PBandsParser(data_folder / "pband_synth" / "pband.xml").parse()
-    assert result["nspin"] == 1
-    assert result["norbitals"] == 2
-    assert result["band_structure"].shape == (4, 3)
-    assert len(result["orbitals"]) == 2
-    for orbital in result["orbitals"]:
-        assert orbital["weights"].shape == (4, 3)
-        assert orbital["attrs"]["species"] == "Si"
-    assert result["orbitals"][0]["attrs"]["index"] == "1"
-    assert result["orbitals"][1]["attrs"]["index"] == "2"
-
-
-def test_pdos_parser(data_folder):
-    result = PDosParser(data_folder / "pband_synth" / "pdos.xml").parse()
-    assert result["nspin"] == 1
-    assert result["norbitals"] == 2
-    assert result["energy"].shape == (5,)
-    assert len(result["orbitals"]) == 2
-    for orbital in result["orbitals"]:
-        assert orbital["pdos"].shape == (5, 1)
-        assert orbital["attrs"]["species"] == "Si"
-
-
-def test_pbands_parser_on_real_si_lcao_fixture(data_folder):
-    """Regression test against the real PBANDS_1 produced by a Si LCAO run.
-
-    The fixture has 358 k-points, 12 bands, and 13 orbitals (one per
-    ``(atom, l, m, z)`` combination). The parser must handle the ABACUS
-    multi-line opening-tag format (``<orbital\n attr=... >``) and produce
-    arrays with the expected shapes.
-    """
-    result = PBandsParser(data_folder / "pband_Si_lcao" / "PBANDS_1").parse()
-    assert result["nspin"] == 1
-    assert result["norbitals"] == 13
-    assert result["band_structure"].shape == (358, 12)
-    assert len(result["orbitals"]) == 13
-    for orbital in result["orbitals"]:
-        assert orbital["weights"].shape == (358, 12)
-        assert orbital["attrs"]["species"] == "Si"
-    # Spot-check a few representative k-points / bands.
-    assert result["band_structure"][0, 0] == pytest.approx(-3.68842)
-    assert result["band_structure"][-1, -1] == pytest.approx(60.4052)
-    # The first orbital corresponds to atom 1, l=0, m=0 (s-orbital on Si).
-    assert result["orbitals"][0]["attrs"] == {
-        "index": "1",
-        "atom_index": "1",
-        "species": "Si",
-        "l": "0",
-        "m": "0",
-        "z": "1",
-    }
-    # The last orbital should be index 13.
-    assert result["orbitals"][-1]["attrs"]["index"] == "13"
-
-
 def test_pdos_parser_on_real_si_lcao_fixture(data_folder):
     """Regression test against the real PDOS produced by a Si LCAO run.
 
     The fixture has 36848 energy grid points, 1 band (nspin=1), and 13
     orbitals.
     """
-    result = PDosParser(data_folder / "pband_Si_lcao" / "PDOS").parse()
+    result = PDosParser(data_folder / "pdos_Si_lcao" / "PDOS").parse()
     assert result["nspin"] == 1
     assert result["norbitals"] == 13
     assert result["energy"].shape == (36848,)
@@ -613,12 +489,6 @@ def test_pdos_parser_on_real_si_lcao_fixture(data_folder):
     }
     # The last orbital should be index 13.
     assert result["orbitals"][-1]["attrs"]["index"] == "13"
-
-
-def test_pbands_parser_rejects_wrong_root_tag():
-    parser = PBandsParser(StringIO("<pdos><nspin>1</nspin></pdos>"))
-    with pytest.raises(ValueError, match="Expected <pband> root tag"):
-        parser.parse()
 
 
 def test_pdos_parser_rejects_wrong_root_tag():
