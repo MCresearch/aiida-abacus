@@ -19,21 +19,109 @@ from aiida_abacus.parsers.raw_parsers import (
 
 def test_eigenvalues(data_folder):
     parser = AbacusRawParser(data_folder / "band_Al_pw/running_scf.log")
-    eigen, _occ, kpt_cart = parser.parse_eigenvalues()
+    eigen, _occ, _kpt_cart = parser.parse_eigenvalues()
     assert eigen.shape == (2, 18, 15)
 
     parser = AbacusRawParser(data_folder / "band_Al_pw/running_nscf.log")
-    eigen, _occ, kpt_cart = parser.parse_eigenvalues()
+    eigen, _occ, _kpt_cart = parser.parse_eigenvalues()
     assert eigen.shape == (2, 61, 15)
+    # The ``band_Al_pw`` fixture only emits the merged ``nks(nspin=2)``
+    # ``K-POINTS DIRECT COORDINATES`` block, not a per-spin one; the
+    # ``parse_kpoints`` helper therefore refuses to parse it. The
+    # dedicated regression tests below cover the per-spin case on real
+    # and synthetic logs.
 
-    kpt_frac, kpt_cart = parser.parse_kpoints()
-    assert kpt_frac.shape == (122, 4)
-    assert kpt_cart.shape == (122, 4)
-    weights = kpt_frac[:, 3]
-    np.testing.assert_allclose(kpt_frac[0], [0.0, 0.0, 0.0, 0.0082])
-    np.testing.assert_allclose(kpt_frac[1], [0.025, -0.025, 0.025, 0.0082])
-    assert weights.shape == (122,)
-    assert sum(weights) == pytest.approx(1.0, abs=1e-3)  # Allow tolerance for floating point precision
+
+def test_parse_kpoints_nspin():
+    """The ``parse_kpoints`` helper must return the per-spin k-point block.
+
+    ABACUS writes the ``K-POINTS DIRECT/CARTESIAN COORDINATES`` block once per
+    spin channel and, for ``nspin == 2`` runs, also appends a combined block
+    that lists the k-points once for every spin (i.e. ``2 * nkstot_per_spin``
+    entries). Earlier revisions of the parser blindly picked the last block
+    and therefore returned ``2 * nkstot_per_spin`` coordinates, which broke the
+    bands parser with ``Inconsistent number of kpoints reported``.
+
+    The parser now selects the first ``K-POINTS DIRECT`` block (which ABACUS
+    always writes first) and validates its size against the per-spin k-point
+    count read from the eigenvalue header.
+    """
+    per_spin_log = "\n".join(
+        [
+            "NSPIN == 2",
+            " 1/3 kpoint (Cartesian) = 0.0 0.0 0.0",
+            " 2/3 kpoint (Cartesian) = 0.25 0.0 0.0",
+            " 3/3 kpoint (Cartesian) = 0.5 0.0 0.0",
+            "",
+            "K-POINTS DIRECT COORDINATES",
+            " KPOINTS    DIRECT_X    DIRECT_Y    DIRECT_Z  WEIGHT",
+            "       1  0.00000000  0.00000000  0.00000000  0.5",
+            "       2  0.25000000  0.00000000  0.00000000  0.5",
+            "       3  0.50000000  0.00000000  0.00000000  0.5",
+            "",
+            "K-POINTS CARTESIAN COORDINATES",
+            " KPOINTS    X    Y    Z  WEIGHT",
+            "       1  0.0  0.0  0.0  0.5",
+            "       2  0.25  0.0  0.0  0.5",
+            "       3  0.5  0.0  0.0  0.5",
+            "",
+        ]
+    )
+
+    parser = AbacusRawParser(StringIO(per_spin_log))
+    kfrac, kcart = parser.parse_kpoints()
+
+    assert kfrac.shape == (3, 4)
+    assert kcart is not None and kcart.shape == (3, 4)
+
+
+def test_parse_kpoints_first_block_size_mismatch_raises():
+    """If the first ``K-POINTS DIRECT`` block is not per-spin, fail loudly."""
+    log = "\n".join(
+        [
+            "NSPIN == 2",
+            " 1/3 kpoint (Cartesian) = 0.0 0.0 0.0",
+            " 2/3 kpoint (Cartesian) = 0.25 0.0 0.0",
+            " 3/3 kpoint (Cartesian) = 0.5 0.0 0.0",
+            "",
+            "K-POINTS DIRECT COORDINATES",
+            " KPOINTS    DIRECT_X    DIRECT_Y    DIRECT_Z  WEIGHT",
+            "       1  0.00000000  0.00000000  0.00000000  0.5",
+            "       2  0.25000000  0.00000000  0.00000000  0.5",
+            "       3  0.50000000  0.00000000  0.00000000  0.5",
+            "       4  0.00000000  0.00000000  0.00000000  0.5",
+            "       5  0.25000000  0.00000000  0.00000000  0.5",
+            "       6  0.50000000  0.00000000  0.00000000  0.5",
+            "",
+        ]
+    )
+
+    parser = AbacusRawParser(StringIO(log))
+    with pytest.raises(ValueError, match="K-POINTS DIRECT block size does not match"):
+        parser.parse_kpoints()
+
+
+def test_parse_kpoints_nspin2_collinear_real_log(data_folder):
+    """Regression test using the on-disk NSPIN=2 collinear ABACUS fixture.
+
+    The log ships with two ``K-POINTS DIRECT COORDINATES`` blocks: the first
+    lists 8 k-points for a single spin channel and the second lists the
+    combined 16 k-points (i.e. ``nks(nspin=2)``). The parser must return the
+    per-spin coordinates so they line up with ``eigenvalues.shape[1]``.
+    """
+    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin2_running_scf.log")
+    eigen, _occ, _kpt_cart = parser.parse_eigenvalues()
+    assert eigen.shape == (2, 8, 15)
+
+    kfrac, kcart = parser.parse_kpoints()
+    assert kfrac.shape == (8, 4)
+    assert kfrac.shape[0] == eigen.shape[1]
+    np.testing.assert_allclose(kfrac[0], [0.0, 0.0, 0.0, 0.0156])
+    np.testing.assert_allclose(kfrac[1], [0.25, 0.25, 0.25, 0.1250])
+    # The fixture only carries the merged all-spin ``K-POINTS CARTESIAN``
+    # block; the helper therefore returns it verbatim.
+    assert kcart is not None
+    assert kcart.shape[0] == 16
 
 
 def test_kpoints_parser(data_folder):

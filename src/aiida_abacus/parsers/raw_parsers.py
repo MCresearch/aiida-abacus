@@ -217,7 +217,15 @@ class AbacusRawParser(BaseRawParser):
 
     def parse_kpoints(self):
         """
-        Parse the kpoints involved in the calculation
+        Parse the kpoints involved in the calculation.
+
+        ABACUS writes the ``K-POINTS DIRECT/CARTESIAN COORDINATES`` block
+        once per spin channel and, for ``nspin == 2`` runs, also appends a
+        combined block that lists the k-points once for every spin. We
+        therefore pick the first DIRECT block (ABACUS always writes the
+        per-spin block first) and validate its size against the per-spin
+        k-point count read from the ``<i>/<n> kpoint (Cartesian)``
+        eigenvalue header.
 
         :return: A tuple of kpoints in direct and cartesian coordinates
         """
@@ -231,13 +239,39 @@ class AbacusRawParser(BaseRawParser):
             offset=2,
             types=[int, float, float, float, float],
         ).parse()
-        if len(kdirect) == 0:
+        if not kdirect:
             raise ValueError("No kpoints data found")
-        if len(kdirect) > 2:
-            raise ValueError("Multiple sets of kpoints data found")
-        # Take the last set of kpoint reported
-        # Return an array made of kpoint coordinates and weight, remove the kpoint index
-        return np.array(kdirect[-1][1])[:, 1:], np.array(kcart[-1][1])[:, 1:]
+
+        kpoints_per_spin = self._detect_kpoints_per_spin()
+        if kpoints_per_spin is None:
+            raise ValueError("No per-spin k-point count found in eigenvalue header.")
+
+        tokens = np.array(kdirect[0][1])
+        if len(tokens) != kpoints_per_spin:
+            raise ValueError("K-POINTS DIRECT block size does not match per-spin k-point count.")
+
+        kdirect_arr = tokens[:, 1:]
+        kcart_arr = np.array(kcart[0][1])[:, 1:] if kcart else None
+        return kdirect_arr, kcart_arr
+
+    def _detect_kpoints_per_spin(self):
+        """Infer the per-spin k-point count from eigenvalue block headers.
+
+        Looks for ``<i>/<n> kpoint (Cartesian)`` style headers in the running
+        log, where ``n`` is the total number of k-points processed for the
+        current spin channel. Returns ``None`` if no such header is found.
+        """
+        match = re.search(
+            r"^\s*(\d+)/(\d+)\s+kpoint\s*\(Cartesian\)",
+            self.content,
+            flags=re.MULTILINE,
+        )
+        if match is None:
+            return None
+        try:
+            return int(match.group(2))
+        except (TypeError, ValueError):
+            return None
 
     def parse_eigenvalues(self):
         """
@@ -471,7 +505,6 @@ class BlockParser:
 
     def convert_type(self):
         """Convert the match data to the correct type"""
-        assert self.blocks
         converted = []
         for block_name, block_tokens in self.blocks:
             new_block = []

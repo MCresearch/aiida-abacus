@@ -177,7 +177,10 @@ class AbacusParser(Parser):
             kweights = kpoints_direct[:, 3]
             node = orm.BandsData()
             node.set_kpoints(kcoord, weights=kweights)
-            assert kcoord.shape[0] == eigenvalues.shape[1], "Inconsistent number of kpoints reported (do not use kpar)"
+            if kcoord.shape[0] != eigenvalues.shape[1]:
+                raise AssertionError(
+                    f"kcoord.shape={kcoord.shape} does not match eigenvalues.shape[1]={eigenvalues.shape[1]}."
+                )
             node.set_bands(eigenvalues, occupations=occupations)
 
             # Handle kpoints labels - ABACUS may remove duplicate kpoints
