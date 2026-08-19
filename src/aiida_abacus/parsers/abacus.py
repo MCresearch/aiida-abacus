@@ -234,6 +234,9 @@ class AbacusParser(Parser):
                     dos_node.set_array("dos1", result["dos1"])
                 if result["dos2"] is not None:
                     dos_node.set_array("dos2", result["dos2"])
+                fermi_level = misc_results.get("fermi_level")
+                if fermi_level is not None:
+                    dos_node.base.attributes.set("fermi_level", fermi_level)
                 self.out("dos", dos_node)
 
         # TODO: there could be other types that should have a output structure
