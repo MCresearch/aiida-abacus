@@ -652,3 +652,16 @@ def test_parser_omits_magnetism_when_nspin_is_unset(calc_with_retrieved, tmp_pat
     misc = parser.outputs["misc"].get_dict()
     assert "magnetism" not in misc
     assert "final_magnetism" not in misc
+
+
+def test_parser_exposes_total_time_in_seconds(parser_with_retrieved):
+    """The `Total  Time` line in `running_*.log` should land in `misc` as seconds.
+
+    The pw_Si2 fixture (lines 683-685) reports `0 h 0 mins 2 secs`, so the
+    parsed value is 2 seconds and the unit is `s`.
+    """
+    parser, _ = parser_with_retrieved("pw_Si2")
+    misc = parser.outputs["misc"].get_dict()
+
+    assert misc["total_time"] == 2.0
+    assert misc["total_time_unit"] == "s"
