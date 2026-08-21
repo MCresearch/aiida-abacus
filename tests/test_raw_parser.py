@@ -32,6 +32,55 @@ def test_eigenvalues(data_folder):
     # and synthetic logs.
 
 
+def test_eigenvalues_nspin2_collinear_band_log(data_folder):
+    """Regression: the nspin=2 path keeps parsing up/down blocks per k-point.
+
+    The on-disk fixture (Si LCAO ``band_Si_lcao/nspin2``, ``NSPIN == 2``)
+    reports 172 k-points as two blocks each (``spin=1`` and ``spin=2``),
+    i.e. 344 eigenvalue blocks in total.
+    """
+    parser = AbacusRawParser(data_folder / "band_Si_lcao/nspin2/running_nscf.log")
+    eigen, occ, kpt_cart = parser.parse_eigenvalues()
+    assert eigen.shape == (2, 172, 16)
+    assert occ.shape == (2, 172, 16)
+    assert kpt_cart.shape == (172, 3)
+
+    # The per-spin ``K-POINTS DIRECT`` block lines up with the eigenvalues.
+    kfrac, _kcart = parser.parse_kpoints()
+    assert kfrac.shape[0] == eigen.shape[1]
+
+
+def test_eigenvalues_nspin4_noncollinear_band_log(data_folder):
+    """nspin=4 (non-collinear/SOC) bands are parsed as a single spin channel.
+
+    ABACUS writes exactly one ``<i>/<n> kpoint (Cartesian)`` block per
+    k-point (every block header reads ``spin=1``) and the ``NBANDS`` rows
+    inside each block are the full spinor spectrum, so ``ntot == nkpts``.
+    The parser must treat the log as a single spin channel instead of
+    assuming ``nspins`` blocks per k-point, which used to trip the
+    ``assert ntot % nspins == 0`` (79 % 4 != 0) and crash the bands parse.
+    """
+    parser = AbacusRawParser(data_folder / "band_Si_lcao/nspin4/running_nscf.log")
+    eigen, occ, kpt_cart = parser.parse_eigenvalues()
+    assert eigen.shape == (1, 79, 28)
+    assert occ.shape == (1, 79, 28)
+    assert kpt_cart.shape == (79, 3)
+
+    # Spot-check the first k-point: gamma at the origin...
+    np.testing.assert_allclose(kpt_cart[0], [0.0, 0.0, 0.0])
+    # ...its lowest spinor eigenvalue and occupation...
+    assert eigen[0, 0, 0] == pytest.approx(-5.79067)
+    assert occ[0, 0, 0] == pytest.approx(0.0126582)
+    # ...and the Kramers degeneracy (doubled bands) of the spinor spectrum.
+    assert eigen[0, 0, 0] == pytest.approx(eigen[0, 0, 1])
+
+    # The per-spin ``K-POINTS DIRECT`` block lines up with the eigenvalues,
+    # satisfying the ``kcoord.shape[0] == eigenvalues.shape[1]`` check used
+    # by the bands parser in ``abacus.py``.
+    kfrac, _kcart = parser.parse_kpoints()
+    assert kfrac.shape[0] == eigen.shape[1]
+
+
 def test_parse_kpoints_nspin():
     """The ``parse_kpoints`` helper must return the per-spin k-point block.
 

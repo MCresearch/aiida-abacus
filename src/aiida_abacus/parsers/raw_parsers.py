@@ -291,12 +291,21 @@ class AbacusRawParser(BaseRawParser):
         eigenvalues = {}
         occupations = {}
         ntot = len(blocks)
-        nkpts = ntot // nspins
+        if nspins == 4:
+            # nspin=4 (non-collinear / SOC): ABACUS prints exactly one
+            # eigenvalue block per k-point (every block header reads
+            # ``spin=1``) and the ``NBANDS`` rows inside each block are the
+            # full spinor spectrum, so the log carries a single spin channel.
+            nkpts = ntot
+        else:
+            # nspin=1/2: one block per spin per k-point (nspin=2 prints an
+            # up and a down block for every k-point).
+            nkpts = ntot // nspins
+            assert ntot % nspins == 0
         # NOTE: Abacus only report the kpoint on the head MPI process!
         # TODO: Raise a PR to the developers to include all kpoints in the log file.
         if nkpts != nkthis_procs:
-            logger.warning("The number of kpoint is (), but only () on this proc")
-        assert ntot % nspins == 0
+            logger.warning("The number of kpoint is %s, but only %s on this proc", nkpts, nkthis_procs)
         kpt_cart = np.zeros((nkpts, 3))
         # Process all blocks
         for i, (key, block) in enumerate(blocks):
