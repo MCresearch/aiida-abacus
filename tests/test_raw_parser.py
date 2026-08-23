@@ -102,6 +102,29 @@ def test_parse_kpoints_first_block_size_mismatch_raises():
         parser.parse_kpoints()
 
 
+def test_parse_kpoints_nspin2_collinear_real_log(data_folder):
+    """Regression test using the on-disk NSPIN=2 collinear ABACUS fixture.
+
+    The log ships with two ``K-POINTS DIRECT COORDINATES`` blocks: the first
+    lists 8 k-points for a single spin channel and the second lists the
+    combined 16 k-points (i.e. ``nks(nspin=2)``). The parser must return the
+    per-spin coordinates so they line up with ``eigenvalues.shape[1]``.
+    """
+    parser = AbacusRawParser(data_folder / "mag_Si_lcao/nspin2_running_scf.log")
+    eigen, _occ, _kpt_cart = parser.parse_eigenvalues()
+    assert eigen.shape == (2, 8, 15)
+
+    kfrac, kcart = parser.parse_kpoints()
+    assert kfrac.shape == (8, 4)
+    assert kfrac.shape[0] == eigen.shape[1]
+    np.testing.assert_allclose(kfrac[0], [0.0, 0.0, 0.0, 0.0156])
+    np.testing.assert_allclose(kfrac[1], [0.25, 0.25, 0.25, 0.1250])
+    # The fixture only carries the merged all-spin ``K-POINTS CARTESIAN``
+    # block; the helper therefore returns it verbatim.
+    assert kcart is not None
+    assert kcart.shape[0] == 16
+
+
 def test_kpoints_parser(data_folder):
     parser = KpointsParser(data_folder / "pw_Si2/OUT.aiida/kpoints")
     points, weights = parser.parse()
