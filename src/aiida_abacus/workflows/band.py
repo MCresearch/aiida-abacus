@@ -96,6 +96,12 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
         )
         spec.output("seekpath_parameters", valid_type=orm.Dict, help="Parameters used for the kpath generation.")
         spec.output("dos", valid_type=orm.ArrayData, required=False, help="Output density of states data.")
+        spec.output(
+            "dos_projected",
+            valid_type=orm.ArrayData,
+            required=False,
+            help="Projected density of states (PDOS). Only available when run_proj_dos is True.",
+        )
         spec.exit_code(601, "ERROR_SUB_PROC_BANDS_FAILED", message="The band structure calculation failed.")
         spec.exit_code(602, "ERROR_SUB_PROC_DOS_FAILED", message="The density of states calculation failed.")
         spec.exit_code(603, "ERROR_SCF_PROCESS_FAILED", message="The SCF calculation failed.")
@@ -336,13 +342,20 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
             additional_retrieve = list(inputs.abacus.settings.get("additional_retrieve_list", []))
             nspin = inputs.abacus.parameters["input"].get("nspin", 1)
             outdos = inputs.abacus.parameters["input"].get("out_dos", None)
-            if outdos is None:
+            if self.ctx.band_settings.get("run_proj_dos", False):
+                # out_dos=2 enables PDOS in addition to the regular DOS files.
+                inputs.abacus.parameters["input"]["out_dos"] = 2
+            elif outdos is None:
                 inputs.abacus.parameters["input"]["out_dos"] = 1
             if nspin == 1:
                 tdos_file = ["DOS1_smearing.dat"]
             else:
                 tdos_file = ["DOS1_smearing.dat", "DOS2_smearing.dat"]
             additional_retrieve.extend(tdos_file)
+            if self.ctx.band_settings.get("run_proj_dos", False):
+                if "PDOS" not in additional_retrieve:
+                    additional_retrieve.append("PDOS")
+                inputs.abacus.settings["include_projected_dos"] = True
             inputs.abacus.settings["additional_retrieve_list"] = additional_retrieve
             dos_input = prepare_process_inputs(AbacusBaseWorkChain, inputs)
             running["dos_workchain"] = self.submit(AbacusBaseWorkChain, **dos_input)
@@ -374,6 +387,8 @@ class AbacusBandWorkChain(ProtocolMixin, WorkChain):
                 exit_code = self.exit_codes.ERROR_SUB_PROC_DOS_FAILED
             else:
                 self.out("dos", dos_workchain.outputs.dos)
+                if "dos_projected" in dos_workchain.outputs:
+                    self.out("dos_projected", dos_workchain.outputs.dos_projected)
 
         return exit_code
 

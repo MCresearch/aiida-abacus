@@ -183,6 +183,13 @@ class AbacusCalculation(CalcJob):
         )
 
         spec.output(
+            "dos_projected",
+            valid_type=orm.ArrayData,
+            help="Projected density of states (PDOS).",
+            required=False,
+        )
+
+        spec.output(
             "trajectory",
             valid_type=orm.TrajectoryData,
             help="Molecular dynamics trajectory data",

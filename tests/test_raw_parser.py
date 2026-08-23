@@ -12,6 +12,7 @@ from aiida_abacus.parsers.raw_parsers import (
     BandsParser,
     InternalParametersParser,
     KpointsParser,
+    PDosParser,
     StruParser,
     WarningLogParser,
 )
@@ -484,3 +485,36 @@ def test_parse_total_time_on_pw_si2_log(data_folder):
 
     assert parser.results["total_time"] == 2.0
     assert parser.results["total_time_unit"] == "s"
+
+
+def test_pdos_parser_on_real_si_lcao_fixture(data_folder):
+    """Regression test against the real PDOS produced by a Si LCAO run.
+
+    The fixture has 36848 energy grid points, 1 band (nspin=1), and 13
+    orbitals.
+    """
+    result = PDosParser(data_folder / "pdos_Si_lcao" / "PDOS").parse()
+    assert result["nspin"] == 1
+    assert result["norbitals"] == 13
+    assert result["energy"].shape == (36848,)
+    assert len(result["orbitals"]) == 13
+    for orbital in result["orbitals"]:
+        assert orbital["pdos"].shape == (36848, 1)
+        assert orbital["attrs"]["species"] == "Si"
+    # The first orbital should be atom 1, l=0, m=0 (s-orbital on Si).
+    assert result["orbitals"][0]["attrs"] == {
+        "index": "1",
+        "atom_index": "1",
+        "species": "Si",
+        "l": "0",
+        "m": "0",
+        "z": "1",
+    }
+    # The last orbital should be index 13.
+    assert result["orbitals"][-1]["attrs"]["index"] == "13"
+
+
+def test_pdos_parser_rejects_wrong_root_tag():
+    parser = PDosParser(StringIO("<pband><nspin>1</nspin></pband>"))
+    with pytest.raises(ValueError, match="Expected <pdos> root tag"):
+        parser.parse()

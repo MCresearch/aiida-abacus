@@ -93,6 +93,10 @@ class SettingsOptions(OptionContainer):
         description="Flag for including the kpoints in the output",
         default=False,
     )
+    include_projected_dos: bool = Field(
+        description="Flag for parsing the projected DOS (PDOS) into the output.",
+        default=False,
+    )
     excluded_retrieve_list: list = Field(
         description="List of files to be excluded from the retrieved files",
         default=[],
@@ -174,6 +178,10 @@ class BandOptions(OptionContainer):
     )
     run_dos: bool = Field(
         description="Flag for running DOS calculations",
+        default=False,
+    )
+    run_proj_dos: bool = Field(
+        description="Flag for running projected DOS (PDOS) calculations. Implies run_dos.",
         default=False,
     )
     additional_band_analysis_parameters: dict = Field(
