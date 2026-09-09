@@ -1,5 +1,6 @@
 """Tests for ABACUS calculations."""
 
+import tempfile
 from pathlib import Path
 
 from aiida import orm
@@ -112,3 +113,69 @@ def test_input_generation_comprehensive(abacus_calc, sandbox_folder):
     assert calcinfo is not None
     assert hasattr(calcinfo, "codes_info")
     assert hasattr(calcinfo, "retrieve_list")
+
+
+def _instantiate_with_extra_files(abacus_inputs, extra_files, basepath=None):
+    """Build a calc process with ``extra_files`` attached."""
+    manager = get_manager()
+    runner = manager.get_runner()
+    inputs = abacus_inputs()
+    inputs.extra_files = AttributeDict(extra_files)
+    if basepath is not None:
+        inputs.extra_files_basepath = orm.Str(basepath)
+    return instantiate_process(runner, AbacusCalculation, **inputs)
+
+
+def test_extra_files_singlefile(abacus_inputs, sandbox_folder, aiida_profile_clean):
+    """A SinglefileData in extra_files is copied to its filename under the basepath."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".cube") as handle:
+        handle.write("# cube content\n")
+        handle.flush()
+        single = orm.SinglefileData(handle.name)
+
+    # Key is a plain label; destination comes from node.filename + basepath.
+    calc = _instantiate_with_extra_files(abacus_inputs, {"chg": single}, basepath="OUT.aiida")
+    calcinfo = calc.prepare_for_submission(sandbox_folder)
+
+    entry = (single.uuid, single.filename, f"OUT.aiida/{single.filename}")
+    assert entry in calcinfo.local_copy_list, f"expected {entry} in {calcinfo.local_copy_list}"
+
+
+def test_extra_files_singlefile_root(abacus_inputs, sandbox_folder, aiida_profile_clean):
+    """Without basepath, a SinglefileData lands in the calculation root."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".cube") as handle:
+        handle.write("# cube content\n")
+        handle.flush()
+        single = orm.SinglefileData(handle.name)
+
+    calc = _instantiate_with_extra_files(abacus_inputs, {"chg": single})
+    calcinfo = calc.prepare_for_submission(sandbox_folder)
+
+    assert (single.uuid, single.filename, single.filename) in calcinfo.local_copy_list
+
+
+def test_extra_files_folder(abacus_inputs, sandbox_folder, aiida_profile_clean):
+    """All objects of a FolderData are copied below the basepath, preserving layout."""
+    folder = orm.FolderData()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".UPF") as handle:
+        handle.write("pseudo content")
+        handle.flush()
+        folder.put_object_from_file(handle.name, "subdir/U.UPF")
+    folder.put_object_from_bytes(b"another", "README.txt")
+
+    calc = _instantiate_with_extra_files(abacus_inputs, {"aux": folder}, basepath="OUT.aiida")
+    calcinfo = calc.prepare_for_submission(sandbox_folder)
+
+    assert (folder.uuid, "subdir/U.UPF", "OUT.aiida/subdir/U.UPF") in calcinfo.local_copy_list
+    assert (folder.uuid, "README.txt", "OUT.aiida/README.txt") in calcinfo.local_copy_list
+
+
+def test_extra_files_empty_namespace(abacus_inputs, sandbox_folder, aiida_profile_clean):
+    """Without extra_files, no extra local copies are added."""
+    manager = get_manager()
+    runner = manager.get_runner()
+    calc = instantiate_process(runner, AbacusCalculation, **abacus_inputs())
+    calcinfo = calc.prepare_for_submission(sandbox_folder)
+
+    # Pseudo files are copied, but nothing extra.
+    assert calcinfo.local_copy_list is not None

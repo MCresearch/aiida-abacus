@@ -24,6 +24,24 @@ from .utils import serialize_dynamics
 LegacyUpfData = DataFactory("core.upf")
 
 
+def _iter_folder_objects(folder_node):
+    """Yield the relative paths of all file objects stored in a ``FolderData``.
+
+    ``FolderData.list_object_names`` only lists the direct children of a
+    directory, so nested objects (e.g. ``subdir/U.UPF``) would be missed.
+    This walks the whole repository and yields one path per file.
+
+    :param folder_node: an :class:`aiida.orm.FolderData` node
+    :return: iterator over relative file paths (POSIX, ``/`` separated)
+    """
+    for root, _, filenames in folder_node.walk():
+        for filename in filenames:
+            if root.as_posix() == ".":
+                yield filename
+            else:
+                yield f"{root.as_posix()}/{filename}"
+
+
 class AbacusCalculation(CalcJob):
     """
     AiiDA calculation plugin wrapping ABACUS calculation.
@@ -138,6 +156,32 @@ class AbacusCalculation(CalcJob):
             required=False,
         )
 
+        # Extra input files to copy into the calculation folder before the run.
+        # The namespace key is an arbitrary label (it has to be a valid python
+        # identifier, as all AiiDA input port names are); the destination path
+        # is taken from the node itself:
+        #   * ``SinglefileData``: copied to ``<basepath>/<node.filename>``;
+        #   * ``FolderData``: every object is copied to
+        #     ``<basepath>/<object_name>``, preserving the object layout.
+        # ``extra_files_basepath`` (default: the calculation root) sets the
+        # directory under which the files are placed, e.g. ``OUT.aiida``.
+        spec.input_namespace(
+            "extra_files",
+            dynamic=True,
+            required=False,
+            valid_type=(orm.SinglefileData, orm.FolderData),
+            help="Extra input files (SinglefileData or FolderData) copied into the calculation "
+            "folder before the run. The namespace key is an arbitrary label.",
+        )
+        spec.input(
+            "extra_files_basepath",
+            valid_type=orm.Str,
+            serializer=to_aiida_type,
+            required=False,
+            help="Destination directory (relative to the calculation folder) under which the "
+            "`extra_files` are placed. Defaults to the calculation root. Example: 'OUT.aiida'.",
+        )
+
         # misc stands for miscellaneous, which is some of
         # the scalar outputs or small vectors (e.g., energy, forces, stress) of the calculation.
         # extracted from the output file OUT.aiida/running_scf.log
@@ -241,6 +285,7 @@ class AbacusCalculation(CalcJob):
 
         local_pseudo_copy_list = self.write_stru(stru_file)
         local_copy_list.extend(local_pseudo_copy_list)
+        local_copy_list.extend(self._get_extra_files_copy_list())
 
         codeinfo = datastructures.CodeInfo()
 
@@ -275,6 +320,47 @@ class AbacusCalculation(CalcJob):
         ]
 
         return calcinfo
+
+    def _get_extra_files_copy_list(self):
+        """Build the ``local_copy_list`` entries for the ``extra_files`` input.
+
+        The namespace keys are arbitrary labels (AiiDA input port names have
+        to be valid python identifiers); the destination is derived from each
+        node and the optional ``extra_files_basepath`` input:
+
+        * ``SinglefileData``: copied to ``<basepath>/<node.filename>``;
+        * ``FolderData``: every object is copied to ``<basepath>/<object>``,
+          preserving the object layout (including subdirectories).
+
+        :return: list of ``(uuid, source_filename, dest_path)`` tuples for
+            ``CalcInfo.local_copy_list``.
+        """
+        local_copy_list = []
+        if "extra_files" not in self.inputs:
+            return local_copy_list
+
+        basepath = ""
+        if "extra_files_basepath" in self.inputs:
+            basepath = self.inputs.extra_files_basepath.value.strip("/")
+
+        for _, node in self.inputs.extra_files.items():
+            if isinstance(node, orm.FolderData):
+                # Copy every file object of the FolderData below the basepath,
+                # preserving the object's relative name and layout.
+                for object_name in _iter_folder_objects(node):
+                    dest_path = os.path.join(basepath, object_name) if basepath else object_name
+                    local_copy_list.append((node.uuid, object_name, dest_path))
+            else:
+                # SinglefileData: copy its single stored file, keeping the
+                # file name (which may contain a dot, e.g. SPIN1_CHG.cube).
+                if hasattr(node, "filename"):
+                    object_name = node.filename
+                else:
+                    object_name = node.base.repository.list_object_names()[0]
+                dest_path = os.path.join(basepath, object_name) if basepath else object_name
+                local_copy_list.append((node.uuid, object_name, dest_path))
+
+        return local_copy_list
 
     # make INPUT file content by given parameters dict
     def generate_input(self, parameters: dict) -> str:
