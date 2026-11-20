@@ -117,15 +117,25 @@ class AbacusBaseWorkChain(ProtocolMixin, BaseRestartWorkChain):
             300,
             "ERROR_UNRECOVERABLE_FAILURE",
             message="The calculation failed with an unidentified unrecoverable error.",
+            invalidates_cache=True,
         )
         spec.exit_code(
-            310, "ERROR_KNOWN_UNRECOVERABLE_FAILURE", message="The calculation failed with a known unrecoverable error."
+            310,
+            "ERROR_KNOWN_UNRECOVERABLE_FAILURE",
+            message="The calculation failed with a known unrecoverable error.",
+            invalidates_cache=True,
         )
-        spec.exit_code(320, "ERROR_INITIALIZATION_CALCULATION_FAILED", message="The initialization calculation failed.")
+        spec.exit_code(
+            320,
+            "ERROR_INITIALIZATION_CALCULATION_FAILED",
+            message="The initialization calculation failed.",
+            invalidates_cache=True,
+        )
         spec.exit_code(
             501,
             "ERROR_IONIC_CONVERGENCE_REACHED_EXCEPT_IN_FINAL_SCF",
             message="Then ionic minimization cycle converged but the thresholds are exceeded in the final SCF.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             710,

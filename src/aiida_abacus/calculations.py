@@ -189,35 +189,52 @@ class AbacusCalculation(CalcJob):
             required=False,
         )
 
+        # All failure exit codes below set ``invalidates_cache=True``: a calculation that failed must never be
+        # served from the AiiDA cache. Otherwise a retry with the same inputs - for example after fixing the
+        # environment that made the first attempt crash - would silently be resolved to the cached failure
+        # instead of actually running again.
         spec.exit_code(
             300,
             "ERROR_MISSING_OUTPUT_FILES",
             message="Calculation did not produce all expected output files.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             301,
             "ERROR_CALCULATION_INCOMPLETE",
             message="Calculation did not complete successfully - 'Total Time' not found at end of running log.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             302,
             "ERROR_ELECTRONIC_NOT_CONVERGED",
             message="SCF did not reach self-consistency.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             303,
             "ERROR_IONIC_NOT_CONVERGED",
             message="Ionic relaxation did not converge within the maximum number of steps.",
+            invalidates_cache=True,
+        )
+        spec.exit_code(
+            305,
+            "ERROR_PROCESS_KILLED",
+            message="The calculation was killed by signal {signal} on node {node} (rank {rank}); this is typically "
+            "the out-of-memory killer or a manual cancellation of the job.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             410,
             "ERROR_SCF_NOT_CONVERGED",
             message="SCF calculation did not converge within the specified electronic minimization steps.",
+            invalidates_cache=True,
         )
         spec.exit_code(
             501,
             "ERROR_IONIC_CONVERGED_BUT_SCF_FAILED",
             message="Ionic minimization converged but final SCF calculation did not converge.",
+            invalidates_cache=True,
         )
         # Set 'misc' to be default output node so calcjob.res and verdi calcjob res works
         spec.default_output_node = "misc"

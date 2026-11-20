@@ -22,6 +22,24 @@ from .raw_parsers import (
     WarningLogParser,
 )
 
+# Exit codes that the CalcJob itself assigns from the scheduler output analysis (OOM, walltime, node failure).
+# `CalcJob.parse` runs that analysis before this parser and stores the result on the node, so these codes are
+# already set by the time `parse` is called. They describe the failure much more precisely than the generic
+# "log is truncated" inference and must not be overwritten.
+SCHEDULER_EXIT_CODES = {
+    110: "ERROR_SCHEDULER_OUT_OF_MEMORY",
+    120: "ERROR_SCHEDULER_OUT_OF_WALLTIME",
+    140: "ERROR_SCHEDULER_NODE_FAILURE",
+}
+
+# A job killed by the scheduler or the OOM killer leaves this in `abacus_output`, one block per rank:
+#
+#     =   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES
+#     =   RANK 46 PID 176375 RUNNING AT n09087
+#     =   KILLED BY SIGNAL: 9 (Killed)
+SIGNAL_KILL_PATTERN = re.compile(r"KILLED BY SIGNAL: (\d+) \(([^)]*)\)")
+RANK_NODE_PATTERN = re.compile(r"RANK (\d+) PID \d+ RUNNING AT (\S+)")
+
 
 class ParserError(RuntimeError):
     """Base exception for parser errors."""
@@ -70,6 +88,77 @@ class AbacusParser(Parser):
         if not issubclass(node.process_class, AbacusCalculation):
             raise exceptions.ParsingError("Can only parse AbacusCalculation")
 
+    def _scheduler_stderr_hint(self, output_folder):
+        """Return a one-line summary of the scheduler's stderr file, or an empty string if unavailable."""
+        try:
+            filename = self.node.get_option("scheduler_stderr") or "_scheduler-stderr.txt"
+        except (AttributeError, KeyError):
+            filename = "_scheduler-stderr.txt"
+        try:
+            with output_folder.open(filename, "r") as fhandle:
+                lines = [line.strip() for line in fhandle.read().splitlines() if line.strip()]
+        except (FileNotFoundError, OSError):
+            return ""
+        if not lines:
+            return ""
+        return " Scheduler stderr (last lines): " + " | ".join(lines[-3:])
+
+    def _scheduler_exit_code(self):
+        """Return the exit code that the scheduler output analysis assigned to this calculation, if any.
+
+        `CalcJob.parse` runs `parse_scheduler_output` before invoking this parser and stores the result on the
+        node, so `self.node.exit_status` is already 110/120/140 when the scheduler could tell what went wrong.
+        """
+        label = SCHEDULER_EXIT_CODES.get(self.node.exit_status)
+        if label is None:
+            return None
+        return getattr(self.exit_codes, label)
+
+    def _signal_kill_exit_code(self, output_folder):
+        """Return an exit code if the job was killed with a signal, as reported in `abacus_output`."""
+        try:
+            with output_folder.open(self.node.process_class._ABACUS_OUTPUT, "r") as fhandle:
+                content = fhandle.read()
+        except (FileNotFoundError, OSError):
+            return None
+
+        match = SIGNAL_KILL_PATTERN.search(content)
+        if match is None:
+            return None
+
+        signal_number, signal_name = match.groups()
+        # The `RANK ... RUNNING AT` line that belongs to this signal block precedes it, so only look at the
+        # few lines right before the match instead of the first rank of the file.
+        rank_match = RANK_NODE_PATTERN.search(content[max(0, match.start() - 300) : match.end()])
+        rank, node = (rank_match.group(1), rank_match.group(2)) if rank_match else ("unknown", "unknown")
+
+        self.logger.error(
+            f"ABACUS was killed by signal {signal_number} ({signal_name}) on node {node}, rank {rank}. "
+            "This is typically the out-of-memory killer or a manual cancellation of the job."
+        )
+        return self.exit_codes.ERROR_PROCESS_KILLED.format(
+            signal=f"{signal_number} ({signal_name})", node=node, rank=rank
+        )
+
+    def _handle_incomplete_calculation(self, output_folder, run_status):
+        """Return the most specific exit code for a calculation that did not write its completion marker."""
+        exit_code = self._scheduler_exit_code()
+        if exit_code is not None:
+            self.logger.warning(
+                f"Keeping exit code {exit_code.status} returned by the scheduler parser instead of "
+                f"'ERROR_CALCULATION_INCOMPLETE'; the truncated log is a consequence of the failure: "
+                f"{exit_code.message}"
+            )
+            return exit_code
+
+        exit_code = self._signal_kill_exit_code(output_folder)
+        if exit_code is not None:
+            return exit_code
+
+        marker = run_status.get("termination_marker", "unknown")
+        self.logger.warning(f"Calculation did not complete successfully. Termination marker: {marker}")
+        return self.exit_codes.ERROR_CALCULATION_INCOMPLETE
+
     def parse(self, **kwargs):
         """
         Parse outputs, store results in database.
@@ -100,6 +189,17 @@ class AbacusParser(Parser):
         # Parse the calculation task output file
         main_log = next(filter(lambda x: "running_" in x, expected_files))
         misc_results = {}
+        if main_log in missing:
+            # ABACUS never wrote its log. In practice this is a failed launch (a broken module environment, a
+            # missing pseudopotential, a scheduler that refused the job, ...). Opening the missing file would
+            # raise `FileNotFoundError` and turn the calculation into an opaque `Excepted`; return a proper exit
+            # code and quote the scheduler's stderr instead.
+            self.logger.error(
+                f"{main_log} was not produced by ABACUS - the run failed before writing any output. "
+                f"Missing files: {missing}.{self._scheduler_stderr_hint(output_folder)}"
+            )
+            return self.exit_codes.ERROR_MISSING_OUTPUT_FILES
+
         with output_folder.open(main_log, "r") as fhandle:
             raw_parser = AbacusRawParser(fhandle)
         misc_results.update(raw_parser.parse())
@@ -117,9 +217,7 @@ class AbacusParser(Parser):
         notifications = run_status.get("notifications", [])
 
         if not run_status.get("completed", False):
-            marker = run_status.get("termination_marker", "unknown")
-            self.logger.warning(f"Calculation did not complete successfully. Termination marker: {marker}")
-            return self.exit_codes.ERROR_CALCULATION_INCOMPLETE
+            return self._handle_incomplete_calculation(output_folder, run_status)
 
         relax_structure = None
         if run_type in RELAX_RUN_TYPES and f"OUT.{output_suffix}/STRU_ION_D" not in missing:
