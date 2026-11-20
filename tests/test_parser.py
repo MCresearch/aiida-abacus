@@ -688,3 +688,74 @@ def test_parser_exposes_total_time_in_seconds(parser_with_retrieved):
 
     assert misc["total_time"] == 2.0
     assert misc["total_time_unit"] == "s"
+
+
+def test_parser_missing_main_log_returns_exit_code(calc_with_retrieved, tmp_path):
+    """A run that never wrote its log must not turn into an `Excepted`.
+
+    Regression: `parse` opened the running log unconditionally, so a calculation killed at launch (a broken
+    module environment, a missing pseudopotential, ...) raised `FileNotFoundError`. The CalcJob then ended up
+    EXCEPTED and the WorkChain only reported "the sub process excepted", hiding the real cause. It must return
+    `ERROR_MISSING_OUTPUT_FILES` and quote the scheduler's stderr instead.
+    """
+    tree = tmp_path / "no_log"
+    tree.mkdir()
+    (tree / "abacus_output").write_text("")
+    (tree / "_scheduler-stderr.txt").write_text(
+        "Loading mkl/2023.1.0\nsrun: fatal: Can't find plugin for select/cons_tres\n"
+    )
+
+    node = calc_with_retrieved(str(tree), {"input": {"calculation": "scf"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None, "a missing running log must yield an exit code instead of raising"
+    assert exit_code.status == 300, f"expected ERROR_MISSING_OUTPUT_FILES (300), got {exit_code.status}"
+
+
+def test_parser_keeps_scheduler_exit_code(calc_with_retrieved, tmp_path):
+    """A scheduler-detected walltime kill must not be downgraded to `ERROR_CALCULATION_INCOMPLETE`.
+
+    `CalcJob.parse` runs the scheduler output analysis first and stores the resulting code on the node. If the
+    parser then returns 301, the work chain can no longer tell "the walltime ran out" from "the run crashed",
+    and - with the default `max_iterations=5` - happily resubmits the identical 24 h job again.
+    """
+    tree = tmp_path / "walltime"
+    _write_retrieved_tree(tree, "scf", "SOME HEADER WITHOUT THE COMPLETION MARKER\n")
+
+    node = calc_with_retrieved(str(tree), {"input": {"calculation": "scf"}})
+    node.set_exit_status(120)
+    node.set_exit_message("The job ran out of walltime.")
+
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 120, f"expected ERROR_SCHEDULER_OUT_OF_WALLTIME (120), got {exit_code.status}"
+
+
+def test_parser_detects_signal_kill(calc_with_retrieved, tmp_path):
+    """A job killed with a signal (OOM killer, scancel) must be reported as such, not as a truncated log.
+
+    `abacus_output` keeps the ORTE termination block of every killed rank, which is the only place where the
+    signal number and the offending node survive.
+    """
+    tree = tmp_path / "killed"
+    _write_retrieved_tree(tree, "scf", "SOME HEADER WITHOUT THE COMPLETION MARKER\n")
+    (tree / "abacus_output").write_text(
+        "===================================================================================\n"
+        "=   BAD TERMINATION OF ONE OF YOUR APPLICATION PROCESSES\n"
+        "=   RANK 46 PID 176375 RUNNING AT n09087\n"
+        "=   KILLED BY SIGNAL: 9 (Killed)\n"
+        "===================================================================================\n"
+    )
+
+    node = calc_with_retrieved(str(tree), {"input": {"calculation": "scf"}})
+    parser = AbacusParser(node)
+    exit_code = parser.parse()
+
+    assert exit_code is not None
+    assert exit_code.status == 305, f"expected ERROR_PROCESS_KILLED (305), got {exit_code.status}"
+    assert "9" in exit_code.message
+    assert "n09087" in exit_code.message
+    assert "46" in exit_code.message
